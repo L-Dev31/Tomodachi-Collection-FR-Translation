@@ -7,6 +7,9 @@ To achieve this, we use various tools to produce a **clean, smooth, and coherent
 
 We know our work is not perfect, but we are confident it will **open new doors for many players**.
 
+The **vast majority** of the translation is **primarily based** on the **Japanese texts**, sometimes with the assistance of the English version, but **never based solely** on the English version.
+
+
 ## Project Progress
 
 | **File**                   | **Progress** |
