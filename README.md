@@ -16,7 +16,7 @@ The **vast majority** of the translation is **primarily based** on the **Japanes
 | ---------------------- | -------- |
 | tmd_costume_msg_JP.bmg | **16%**      |
 | tmd_etc_msg_JP.bmg     | **99%**      |
-| tmd_item_msg_JP.bmg    | **20%**      |
+| tmd_item_msg_JP.bmg    | **40%**      |
 
 ## Screenshots:
 
