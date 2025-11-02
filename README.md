@@ -6,4 +6,5 @@ With the help of the tool created for the occasion, L-DEU's BMG EDITOR, we are t
 
 Project progress:
 
-tmd_costume_msg_JP_edited.bmg 16%
+tmd_costume_msg_JP.bmg 16%
+tmd_etc_msg_JP.bmg 99%
