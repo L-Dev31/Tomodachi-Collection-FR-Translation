@@ -9,3 +9,5 @@ Project progress:
 -tmd_costume_msg_JP.bmg 16%
 
 -tmd_etc_msg_JP.bmg 99%
+
+-tmd_item_msg_JP.bmg 20%
