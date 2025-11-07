@@ -24,11 +24,12 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 ## Project Progress
 
-| **File**                   | **Progress** |
+| **File**               | **Progress** |
 | ---------------------- | -------- |
-| tmd_costume_msg_JP.bmg | **16%**      |
-| tmd_etc_msg_JP.bmg     | **99%**      |
+| tmd_costume_msg_JP.bmg | **19.5%**      |
+| tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    |
 | tmd_item_msg_JP.bmg    | **40%**      |
+| tmd_news_msg_JP.bmg    | **?%**      |
 
 ## Screenshots:
 
