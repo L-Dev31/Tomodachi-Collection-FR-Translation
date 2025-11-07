@@ -16,7 +16,9 @@ Please feel free to let us know when a translation is incorrect or inaccurate.
 
 Grâce à notre outil dédié, **l’éditeur BMG de L-DEU**, nous réalisons **une traduction française complète** de ce jeu.
 Notre approche combine plusieurs outils pour garantir un résultat **fluide, cohérent et fidèle**.
+
 Bien que notre travail ne soit pas parfait, nous espérons qu’il **ouvrira de nouvelles perspectives** à de nombreux joueurs.
+
 La traduction repose **principalement sur les textes japonais**, parfois aidée par la version anglaise, mais **jamais uniquement** sur cette dernière.
 N’hésitez pas à nous signaler toute erreur ou imprécision !
 
