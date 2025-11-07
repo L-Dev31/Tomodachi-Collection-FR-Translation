@@ -33,9 +33,10 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 ## Screenshots:
 
 <p float="left">
-  <img src="https://media.discordapp.net/attachments/1434576836247163110/1434586301549641749/image.png?ex=6908de1b&is=69078c9b&hm=327cc85b63d54839444739b7292ed9c620e5ac0ade9345dc33fb935a038050f9&=&format=webp&quality=lossless&width=402&height=602" width="200" />
+  <img src="https://media.discordapp.net/attachments/1434576836247163110/1436401051543670794/image.png?ex=690f7839&is=690e26b9&hm=69172b1d09c0cfc203f580e9f900006e2a34d90439e766683d7a1cdaa9ef3182&=&format=webp&quality=lossless&width=399&height=596" width="200" />
   <img src="https://media.discordapp.net/attachments/1433131195192836249/1434542465565720606/image.png?ex=6908b548&is=690763c8&hm=c94e4dcdd53c5202768ea3df214117abcf36a154692119676c017c663a2c0e4b&=&format=webp&quality=lossless&width=410&height=612" width="200" />
   <img src="https://media.discordapp.net/attachments/1433131195192836249/1433765415150161930/image.png?ex=69088499&is=69073319&hm=f241e9bce0e901e6fcc2520306c51e94c8d63b240348e86e3f24c65eb46f7b2a&=&format=webp&quality=lossless&width=382&height=588" width="200" />
+  <img src="https://media.discordapp.net/attachments/1434576836247163110/1436401873434448064/image.png?ex=690f78fd&is=690e277d&hm=70e4a8ea58541bf03fc3f07c46d9732c33a1aeabeab75aa95bd1375334997fc8&=&format=webp&quality=lossless&width=399&height=606" width="200" />
 </p>
 
 
