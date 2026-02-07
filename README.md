@@ -38,7 +38,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
   <img src="https://8upload.com/image/e86bdb4a015a187c/lechatsurmer.png" width="200" />
   <img src="https://8upload.com/image/b2e09466adfae782/shop.png" width="200" />
   <img src="https://8upload.com/image/12d3577bb8d0a010/caract__re.png" width="200" />
-  <img src="https://8upload.com/image/64e212e7f8a74faa/immeuble.png" width="200" />
+  <img src="https://8upload.com/image/726da51032d09414/appartements.png" width="200" />
 </p>
 
 
