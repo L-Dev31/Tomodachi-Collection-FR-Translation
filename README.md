@@ -4,7 +4,7 @@
 
 ## ENG description
 
-With the help of the tool specially created for this project, **L-DEU's BMG EDITOR**, we are working on **a complete French translation of this game**.
+With the help of the tool specially created for this project, **L-DEV's BMG EDITOR**, we are working on **a complete French translation of this game**.
 To achieve this, we use various tools to produce a **clean, smooth, and coherent translation**.
 
 We know our work is not perfect, but we are confident it will **open new doors for many players**.
@@ -14,7 +14,7 @@ Please feel free to let us know when a translation is incorrect or inaccurate.
 
 ## FR description
 
-Grâce à notre outil dédié, **l’éditeur BMG de L-DEU**, nous réalisons **une traduction française complète** de ce jeu.
+Grâce à notre outil dédié, **L-DEV's BMG EDITOR**, nous réalisons **une traduction française complète** de ce jeu.
 Notre approche combine plusieurs outils pour garantir un résultat **fluide, cohérent et fidèle**.
 
 Bien que notre travail ne soit pas parfait, nous espérons qu’il **ouvrira de nouvelles perspectives** à de nombreux joueurs.
