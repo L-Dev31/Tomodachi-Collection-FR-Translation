@@ -30,7 +30,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    |
 | tmd_item_msg_JP.bmg    | **40%**      |
 | tmd_news_msg_JP.bmg    | **?%**      |
-| tmd_explain_msg_JP.bgm | **2.3%**                               |
+| tmd_explain_msg_JP.bgm | **3.4%**                               |
 
 ## Screenshots:
 
