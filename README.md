@@ -24,13 +24,22 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 ## Project Progress
 
-| **File**               | **Progress** |
+| **File (BGM)**               | **Progress** | **Number translated** |
+| ---------------------- | -------- | -------- |
+| tmd_costume_msg_JP.bmg | **19.5%**      | ? |
+| tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    | ? |
+| tmd_item_msg_JP.bmg    | **40%**      | ? |
+| tmd_news_msg_JP.bmg    | **?%**      | ? |
+| tmd_explain_msg_JP.bgm | **6.6%**                               | 63 |
+
+
+| **File (IMG)**               | **Progress** |
 | ---------------------- | -------- |
-| tmd_costume_msg_JP.bmg | **19.5%**      |
-| tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    |
-| tmd_item_msg_JP.bmg    | **40%**      |
-| tmd_news_msg_JP.bmg    | **?%**      |
-| tmd_explain_msg_JP.bgm | **6.6%**                               |
+| SceneMap2WndCityhall | **3/3**      |
+| tmd_etc_msg_JP.bmg     | **?/3**|
+| tmd_item_msg_JP.bmg    | **?/3**      |
+| tmd_news_msg_JP.bmg    | **?/3**      |
+| tmd_explain_msg_JP.bgm | **?/3**                               |
 
 ## Screenshots:
 
