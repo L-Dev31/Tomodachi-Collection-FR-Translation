@@ -35,11 +35,16 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 | **File (IMG)**               | **Progress** |
 | ---------------------- | -------- |
-| SceneMap2WndCityhall | **3/3**      |
-| tmd_etc_msg_JP.bmg     | **?/3**|
-| tmd_item_msg_JP.bmg    | **?/3**      |
-| tmd_news_msg_JP.bmg    | **?/3**      |
-| tmd_explain_msg_JP.bgm | **?/3**                               |
+| SceneMap2WndCityhall | **3/3**     |
+| SceneMap2WndEntrance     | **?/3** |
+| SceneMap2WndFountain    | **?/3**  |
+| SceneMap2WndNews    | **?/3**      |
+| SceneMap2WndQuestion | **?/3**     |
+| SceneMap2WndRanking | **?/3**     |
+| SceneMap2WndShop_food | **?/3**     |
+| SceneMap2WndShop_reform | **?/3**     |
+| SceneMap2WndTitle | **?/3**     |
+| SceneMap2WndVote | **?/3**     |
 
 ## Screenshots:
 
