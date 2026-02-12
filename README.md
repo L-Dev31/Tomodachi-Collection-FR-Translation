@@ -47,6 +47,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndShop_reform | **3/3**     |
 | SceneMap2WndTitle | **3/3**     |
 | SceneMap2WndVote | **3/3**     |
+| SceneMap2WndDiagnosis | **3/3**     |
 
 ## Screenshots:
 
