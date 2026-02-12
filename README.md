@@ -26,11 +26,11 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 | **File (BGM)**               | **Progress** | **Number translated** |
 | ---------------------- | -------- | -------- |
-| tmd_costume_msg_JP.bmg | **19.5%**      | ? |
-| tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    | ? |
-| tmd_item_msg_JP.bmg    | **40%**      | ? |
+| tmd_costume_msg_JP.bmg | **99%**   (ajustement/vérification du texte: 1%)   | 600/600 |
+| tmd_etc_msg_JP.bmg     | **99%**  (ajustement/vérification du texte: 40%)    | 424/424 |
+| tmd_item_msg_JP.bmg    | **99%**  (ajustement/vérification du texte: 1%)    | 510/510 |
 | tmd_news_msg_JP.bmg    | **?%**      | ? |
-| tmd_explain_msg_JP.bgm | **9.9%**                               | 63 |
+| tmd_explain_msg_JP.bgm | **9.9%**                               | 63/638 |
 
 
 | **File (IMG)**               | **Progress** |
