@@ -57,7 +57,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
   <img src="https://8upload.com/image/12d3577bb8d0a010/caract__re.png" width="200" />
   <img src="https://8upload.com/image/726da51032d09414/appartements.png" width="200" />
   <img src="https://8upload.com/image/726da51032d09414/appartements.png" width="200" />
-  <img src="https://8upload.com/image/09ce023a3104ac8c/2026-02-12_21-23-04_1_.gif" width="200" />
+  <gif src="https://8upload.com/image/09ce023a3104ac8c/2026-02-12_21-23-04_1_.gif" width="200" />
 </p>
 
 
