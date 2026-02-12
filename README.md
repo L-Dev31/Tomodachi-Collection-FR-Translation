@@ -41,9 +41,9 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndNews    | **3/3**      |
 | SceneMap2WndQuestion | **3/3**     |
 | SceneMap2WndRanking | **3/3**     |
-| SceneMap2WndShop_costume | **2/3**     |
+| SceneMap2WndShop_costume | **3/3**     |
 | SceneMap2WndShop_food | **3/3**     |
-| SceneMap2WndShop_item | **2/3**     |
+| SceneMap2WndShop_item | **2/3** (à vérifier)    |
 | SceneMap2WndShop_reform | **3/3**     |
 | SceneMap2WndTitle | **3/3**     |
 | SceneMap2WndVote | **3/3**     |
