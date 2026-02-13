@@ -56,7 +56,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
   <img src="https://8upload.com/image/b2e09466adfae782/shop.png" width="200" />
   <img src="https://8upload.com/image/12d3577bb8d0a010/caract__re.png" width="200" />
   <img src="https://8upload.com/image/726da51032d09414/appartements.png" width="200" />
-  <img src="https://8upload.com/image/09ce023a3104ac8c/2026-02-12_21-23-04_1_.gif" width="200" />
+  <img src="https://media.discordapp.net/attachments/1434576836247163110/1471920485934825534/Tomodachico_FR.gif?ex=6990b046&is=698f5ec6&hm=9fd283a155ff5010065dc6cead7621e4b9ea3873b6f3c7db6a8df5b015156e5a&=&width=335&height=499" width="200" />
 </p>
 
 
