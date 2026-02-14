@@ -24,13 +24,33 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 ## Project Progress
 
-| **File**               | **Progress** |
+| **File (BGM)**               | **Progress** | **Number translated** |
+| ---------------------- | -------- | -------- |
+| tmd_costume_msg_JP.bmg | **99%**   (ajustement/vérification du texte: 1%)   | 600/600 |
+| tmd_etc_msg_JP.bmg     | **99%**  (ajustement/vérification du texte: 40%)    | 424/424 |
+| tmd_item_msg_JP.bmg    | **99%**  (ajustement/vérification du texte: 1%)    | 510/510 |
+| tmd_news_msg_JP.bmg    | **?%**      | ? |
+| tmd_explain_msg_JP.bgm | **9.9%**                               | 63/638 |
+
+
+| **File (IMG)**               | **Progress** |
 | ---------------------- | -------- |
-| tmd_costume_msg_JP.bmg | **19.5%**      |
-| tmd_etc_msg_JP.bmg     | **99%**  (ajustement du texte: 40%)    |
-| tmd_item_msg_JP.bmg    | **40%**      |
-| tmd_news_msg_JP.bmg    | **?%**      |
-| tmd_explain_msg_JP.bgm | **2.3%**                               |
+| SceneMap2WndCityhall | **3/3**     |
+| SceneMap2WndEntrance     | **3/3** |
+| SceneMap2WndFountain    | **3/3**  |
+| SceneMap2WndNews    | **3/3**      |
+| SceneMap2WndQuestion | **3/3**     |
+| SceneMap2WndRanking | **3/3**     |
+| SceneMap2WndShop_costume | **3/3**     |
+| SceneMap2WndShop_food | **3/3**     |
+| SceneMap2WndShop_item | **2/3** (à vérifier)    |
+| SceneMap2WndShop_reform | **3/3**     |
+| SceneMap2WndTitle | **3/3**     |
+| SceneMap2WndVote | **3/3**     |
+| SceneMap2WndDiagnosis | **3/3**     |
+| SceneMap2WndDome | **3/3** |
+| SceneMap2WndMachine | **3/3** |
+| SceneMap2WndRightjob | **3/3** |
 
 ## Screenshots:
 
@@ -39,6 +59,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
   <img src="https://8upload.com/image/b2e09466adfae782/shop.png" width="200" />
   <img src="https://8upload.com/image/12d3577bb8d0a010/caract__re.png" width="200" />
   <img src="https://8upload.com/image/726da51032d09414/appartements.png" width="200" />
+  <img src="https://web.archive.org/web/20260214090011im_/https://camo.githubusercontent.com/13041fb2fe21b83e26f87eebae52e27198c7a5cd6729c3dc8beaccd43233e2eb/68747470733a2f2f6d656469612e646973636f72646170702e6e65742f6174746163686d656e74732f313433343537363833363234373136333131302f313437313932303438353933343832353533342f546f6d6f6461636869636f5f46522e6769663f65783d36393930623034362669733d363938663565633626686d3d39666432383361313535666635303130303635646336636561643736323165346239656133383733623666336337646236613864663562303135313536653561263d2677696474683d333335266865696768743d343939" width="200" />
 </p>
 
 
