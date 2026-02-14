@@ -50,6 +50,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndDiagnosis | **3/3**     |
 | SceneMap2WndDome | **3/3** |
 | SceneMap2WndMachine | **3/3** |
+| SceneMap2WndRightjob | **3/3** |
 
 ## Screenshots:
 
