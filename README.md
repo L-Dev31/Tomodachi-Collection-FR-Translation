@@ -31,6 +31,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | tmd_item_msg_JP.bmg    | **99%**  (ajustement/vérification du texte: 1%)    | 510/510 |
 | tmd_news_msg_JP.bmg    | **?%**      | ? |
 | tmd_explain_msg_JP.bgm | **9.9%**                               | 63/638 |
+| **Global** | ?% |
 
 
 | **File (IMG-Map)**               | **Progress** |
@@ -51,6 +52,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndDome | **3/3** |
 | SceneMap2WndMachine | **3/3** |
 | SceneMap2WndRightjob | **3/3** |
+| **Global** | **99%** |
 
 | **File (IMG-List)**               | **Progress** |
 | ---------------------- | -------- |
@@ -58,6 +60,8 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | List_MiiList_Obj_list | **2/2** |
 | ShopList_BG_list | **2/2** |
 | ShopList_Obj_list | **2/2** |
+| NewsList (obj and bg) | **no need to translate** |
+| **Global** | **36%** |
 
 ## Screenshots:
 
