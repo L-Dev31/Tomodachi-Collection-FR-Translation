@@ -54,12 +54,14 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndRightjob | **3/3** |
 | **Global** | **99%** |
 
-| **File name (IMG-List)**  | **Progress** |
-| ---------------------- | -------------- |
-| Mii List | **2/2** |
-| Shop List | **2/2** |
-| News List | **no need to translate** |
-| **Global** | **?%** |
+| **File (IMG-List)** |	**Progress** |
+| ---------------------- | -------- |
+| ChangeRoom_Obj_list |	**2/2** |
+| List_MiiList_Obj_list |	**2/2** |
+| ShopList_BG_list |	**2/2** |
+| ShopList_Obj_list |	**2/2** |
+| NewsList (obj and bg) |	**no need to translate** |
+| **Global** |	**36%** |
 
 ## Screenshots:
 
