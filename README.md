@@ -27,13 +27,13 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | **File (BGM)**               | **Progress** | **Number translated** |
 | ---------------------- | -------- | -------- |
 | tmd_costume_msg_JP.bmg | **99%**   (ajustement/vérification du texte: 1%)   | 600/600 |
-| tmd_etc_msg_JP.bmg     | **99%**  (ajustement/vérification du texte: 40%)    | 424/424 |
+| tmd_etc_msg_JP.bmg     | **99%**  (ajustement/vérification du texte: 41%)    | 424/424 |
 | tmd_item_msg_JP.bmg    | **99%**  (ajustement/vérification du texte: 1%)    | 510/510 |
 | tmd_news_msg_JP.bmg    | **?%**      | ? |
 | tmd_explain_msg_JP.bgm | **9.9%**                               | 63/638 |
 
 
-| **File (IMG)**               | **Progress** |
+| **File (IMG-Map)**               | **Progress** |
 | ---------------------- | -------- |
 | SceneMap2WndCityhall | **3/3**     |
 | SceneMap2WndEntrance     | **3/3** |
@@ -51,6 +51,13 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndDome | **3/3** |
 | SceneMap2WndMachine | **3/3** |
 | SceneMap2WndRightjob | **3/3** |
+
+| **File (IMG-List)**               | **Progress** |
+| ---------------------- | -------- |
+| ChangeRoom_Obj_list | **2/2** |
+| List_MiiList_Obj_list | **2/2** |
+| ShopList_BG_list | **2/2** |
+| ShopList_Obj_list | **2/2** |
 
 ## Screenshots:
 
