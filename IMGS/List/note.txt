@@ -1,0 +1,3 @@
+Le reste des fichier sont des fichiers très similaires, mais assez différents pour qu'ils soient pris en compte un à un.
+Nous devons donc le traduire. Mais comme je n'ai pas encore la motivation pur le faire, je le continuerai plus tard.
+Normalement en une soirée ça devrait être terminé.
