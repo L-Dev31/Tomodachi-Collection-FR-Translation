@@ -62,7 +62,8 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | ShopList_Obj_list |	**2/2** |
 | NewsList (obj and bg) |	**no need to translate** |
 | AlbumList_Obj_list | **2/2** |
-| **Global** |	**45%** |
+| RightJob_Obj_list | **2/2** |
+| **Global** |	**54%** |
 
 ## Screenshots:
 
