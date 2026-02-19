@@ -63,7 +63,8 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | NewsList (obj and bg) |	**no need to translate** |
 | AlbumList_Obj_list | **2/2** |
 | RightJob_Obj_list | **2/2** |
-| **Global** |	**54%** |
+| TouchList_Obj_list | **2/2** |
+| **Global** |	**63%** |
 
 ## Screenshots:
 
