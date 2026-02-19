@@ -54,7 +54,7 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | SceneMap2WndRightjob | **3/3** |
 | **Global** | **99%** |
 
-| **File (IMG-List)** |	**Progress** |
+| **File (IMG-List-obj)** |	**Progress** |
 | ---------------------- | -------- |
 | ChangeRoom_Obj_list |	**2/2** |
 | List_MiiList_Obj_list |	**2/2** |
@@ -64,7 +64,10 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | AlbumList_Obj_list | **2/2** |
 | RightJob_Obj_list | **2/2** |
 | TouchList_Obj_list | **2/2** |
-| **Global** |	**63%** |
+| TushinItemList_Obj_list | **2/2** |
+| TushinList_Obj_list | **2/2** |
+| WriteSongList_Obj_list | **2/2** |
+| **Global** |	**90%** |
 
 ## Screenshots:
 
