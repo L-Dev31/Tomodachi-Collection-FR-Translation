@@ -61,7 +61,8 @@ N’hésitez pas à nous signaler toute erreur ou imprécision !
 | ShopList_BG_list |	**2/2** |
 | ShopList_Obj_list |	**2/2** |
 | NewsList (obj and bg) |	**no need to translate** |
-| **Global** |	**36%** |
+| AlbumList_Obj_list | **2/2** |
+| **Global** |	**45%** |
 
 ## Screenshots:
 
