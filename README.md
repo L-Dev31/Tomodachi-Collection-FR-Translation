@@ -23,12 +23,7 @@ La traduction repose **principalement sur les textes japonais**, parfois aidée 
 N’hésitez pas à nous signaler toute erreur ou imprécision !
 
 Outils utilisés:
--NSMBeditor
--Tinke
--Divers émulateurs (Desume, ...)
--L-DEV's BMG EDITOR
--Paint.net
--Floating Patch Maker
+NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.net, Floating Patch Maker
 
 ## Project Progress
 
