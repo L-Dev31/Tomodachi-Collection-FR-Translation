@@ -22,7 +22,7 @@ Bien que notre travail ne soit pas parfait, nous espérons qu’il **ouvrira de 
 La traduction repose **principalement sur les textes japonais**, parfois aidée par la version anglaise, mais **jamais uniquement** sur cette dernière.
 N’hésitez pas à nous signaler toute erreur ou imprécision !
 
-Outils utilisés:
+Outils utilisés (Tool used):
 NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.net, Floating Patch Maker
 
 ## Project Progress
