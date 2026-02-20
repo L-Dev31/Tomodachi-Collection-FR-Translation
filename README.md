@@ -109,6 +109,7 @@ NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.n
 |SceneTestNg97 | . |
 |SceneVote | . |
 |SceneWriteSong | . |
+| **Global** | **0%** |
 
 ## Screenshots:
 
