@@ -73,7 +73,7 @@ NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.n
 | MiiList | **0/2** |
 | **Global** |	**90%** |
 
-| **File (IMG-Scene-obj)** |	**Progress** |
+| **File (IMG-Scene)** |	**Progress** |
 | ---------------------- | -------- |
 |SceneAffinity | . |
 |SceneAlbum | . |
