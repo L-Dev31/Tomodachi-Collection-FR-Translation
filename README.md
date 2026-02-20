@@ -70,7 +70,45 @@ NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.n
 | TushinItemList_Obj_list | **2/2** |
 | TushinList_Obj_list | **2/2** |
 | WriteSongList_Obj_list | **2/2** |
+| MiiList | **0/2** |
 | **Global** |	**90%** |
+
+| **File (IMG-Scene-obj)** |	**Progress** |
+| ---------------------- | -------- |
+|SceneAffinity | . |
+|SceneAlbum | . |
+|SceneChangeClothes | . |
+|SceneCharDistribution | . |
+|SceneCityHall | . |
+|SceneFriendList | . |
+|SceneMap2 | . |
+|SceneMiiEdit2 | . |
+|SceneMiiNews | . |
+|SceneMiiTouch | . |
+|SceneOption | . |
+|ScenePlayRoom2 | . |
+|ScenePlayRoomtut | . |
+|SceneRanking | . |
+|SceneRightJob2 | . |
+|SceneRomance | . |
+|SceneShop | . |
+|SceneTestNg100 | . |
+|SceneTestNg107 | . |
+|SceneTestNg110 | . |
+|SceneTestNg112 | . |
+|SceneTestNg116 | . |
+|SceneTestNg117 | . |
+|SceneTestNg119 | . |
+|SceneTestNg125 | . |
+|SceneTestNg129 | . |
+|SceneTestNg133 | . |
+|SceneTestNg134 | . |
+|SceneTestNg136 | . |
+|SceneTestNg75 | . |
+|SceneTestNg95 | . |
+|SceneTestNg97 | . |
+|SceneVote | . |
+|SceneWriteSong | . |
 
 ## Screenshots:
 
