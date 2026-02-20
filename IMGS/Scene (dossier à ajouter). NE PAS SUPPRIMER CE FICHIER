@@ -1,0 +1,41 @@
+Seul moi (Mia) ai le droit de supprimer ce fichier, car je me charge de la traduction des images et je n'ai pas encore terminé, merci.
+
+Liste des bin dans le dossier Scene à modifier (pour que je m'en souvienne bien, 1=c'est sûr, 2= c'est pas sûr):
+-SceneAffinity 1
+-SceneAlbum 1
+-SceneChangeClothes 1
+-SceneCharDistribution 2
+-SceneCityHall 2
+-SceneFriendList 1
+-SceneMap2 1
+-SceneMiiEdit2 1
+-SceneMiiNews 1
+-SceneMiiTouch 1
+-SceneOption 1
+-ScenePlayRoom2 1
+-ScenePlayRoomtut 1
+-SceneRanking 1
+-SceneRightJob2 1
+-SceneRomance 1
+-SceneShop 1 ('faudra se dépêcher de trouver où modifier les valeurs d'argent, car comme ça je peux choisir entre Y et €. Perso je préfère rester sur Y comme ça quand les mii nous donne l'argent etc. Y'a pas à faire la conversion)
+-SceneTestNg100 1
+-SceneTestNg107 1 
+-SceneTestNg110 1
+-SceneTestNg112 2
+-SceneTestNg116 1
+-SceneTestNg117 1 (les testng ça semble être les images des minijeux que tu joues avec les Miis)
+-SceneTestNg119 1
+-SceneTestNg125 1
+-SceneTestNg129 1
+-SceneTestNg133 1
+-SceneTestNg134 1
+-SceneTestNg136 1
+-SceneTestNg75 1
+-SceneTestNg95 1
+-SceneTestNg97 1
+-SceneVote 1
+-SceneWriteSong 1
+
+Note: Il faudra donc rajouter un dossier Scene en plus de List et Map.
+
+--Mia
