@@ -75,8 +75,8 @@ NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.n
 
 | **File (IMG-Scene)** |	**Progress** |
 | ---------------------- | -------- |
-|SceneAffinity | . |
-|SceneAlbum | . |
+|SceneAffinity | **2/2** |
+|SceneAlbum | **15/15** |
 |SceneChangeClothes | . |
 |SceneCharDistribution | . |
 |SceneCityHall | . |
@@ -109,7 +109,7 @@ NSMBeditor, Tinke, Divers émulateurs (Desume, ...), L-DEV's BMG EDITOR, Paint.n
 |SceneTestNg97 | . |
 |SceneVote | . |
 |SceneWriteSong | . |
-| **Global** | **0%** |
+| **Global** | **6%** |
 
 ## Screenshots:
 
