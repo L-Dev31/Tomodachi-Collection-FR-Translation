@@ -1,5 +1,9 @@
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/24d74250-6a6a-4dd7-8f19-dcdb8949d137" />
 
+## Note
+The project **is not dead**, we just have lives and we'll work on it when we have time.
+Le projet **n'est pas mort**, nous avons simplement des vies en dehors de ce projet, et nous travaillerons dessus quand nous aurons le temps de le faire.
+
 # Tomodachi Collection FRENCH Translation 🇫🇷
 
 ## ENG description
