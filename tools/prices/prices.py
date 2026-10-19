@@ -41,28 +41,198 @@ GLYPHS = {
     '/Scn/Scene/SceneWriteSong_LZ.bin': [(3, 32, 38, 97), (3, 32, 178, 83), (3, 32, 177, 124)],
 }
 FONTS = ['/Cmn/Font/FontLD08x_LZ.bin', '/Cmn/Font/FontLD10x_LZ.bin', '/Cmn/Font/FontLD12x_LZ.bin']
+DEFAULT = ('¤', 0xA4, None, 0)
 SYMBOL = {}
 for codes, spec in (
-        ('USD AUD CAD HKD NZD SGD TWD ARS BSD BBD BMD BZD BND CLP COP CUP DOP FJD GYD JMD KYD LRD MXN NAD SBD SRD TTD TVD UYU XCD ZWL', (0x24, None, 0)),
-        ('GBP EGP FKP GIP SHP GGP IMP JEP LBP SYP SSP', (0xA3, 'L', 1)),
-        ('JPY CNY CNH', (0xFFE5, None, 0)),
-        ('EUR', (0x20AC, 'C', 2)),
-        ('ANG AWG', (0x192, 'f', 0)),
-        ('KRW', (None, 'W', 2)),
-        ('INR', (None, 'R', 2)),
-        ('RUB PHP', (None, 'P', 2)),
-        ('TRY', (None, 'L', 2)),
-        ('VND', (None, 'D', 2)),
-        ('NGN', (None, 'N', 2)),
-        ('KZT', (None, 'T', 1)),
-        ('MNT', (None, 'T', 2)),
-        ('GHS', (None, 'C', 1)),
-        ('CRC', (None, 'C', 2)),
-        ('PYG', (None, 'G', 2)),
-        ('LAK', (None, 'K', 2)),
+        ('USD AUD CAD HKD NZD SGD TWD ARS BSD BBD BMD BZD BND CLP COP CUP DOP FJD GYD JMD KYD LRD MXN NAD SBD SRD TTD TVD UYU XCD ZWL', ('$', 0x24, None, 0)),
+        ('GBP EGP FKP GIP SHP GGP IMP JEP LBP SYP SSP', ('£', 0xA3, 'L', 1)),
+        ('JPY CNY CNH', ('¥', 0xFFE5, None, 0)),
+        ('EUR', ('€', 0x20AC, 'C', 2)),
+        ('ANG AWG', ('ƒ', 0x192, 'f', 0)),
+        ('KRW', ('₩', None, 'W', 2)),
+        ('INR', ('₹', None, 'R', 2)),
+        ('RUB', ('₽', None, 'P', 2)),
+        ('PHP', ('₱', None, 'P', 2)),
+        ('TRY', ('₺', None, 'L', 2)),
+        ('VND', ('₫', None, 'D', 2)),
+        ('NGN', ('₦', None, 'N', 2)),
+        ('KZT', ('₸', None, 'T', 1)),
+        ('MNT', ('₮', None, 'T', 2)),
+        ('GHS', ('₵', None, 'C', 1)),
+        ('CRC', ('₡', None, 'C', 2)),
+        ('PYG', ('₲', None, 'G', 2)),
+        ('LAK', ('₭', None, 'K', 2)),
 ):
     for code in codes.split():
         SYMBOL[code] = spec
+NAMES = dict(line.split(' ', 1) for line in '''
+AED UAE Dirham
+AFN Afghan Afghani
+ALL Albanian Lek
+AMD Armenian Dram
+ANG Netherlands Antillean Guilder
+AOA Angolan Kwanza
+ARS Argentine Peso
+AUD Australian Dollar
+AWG Aruban Florin
+AZN Azerbaijani Manat
+BAM Bosnia-Herzegovina Mark
+BBD Barbadian Dollar
+BDT Bangladeshi Taka
+BGN Bulgarian Lev
+BHD Bahraini Dinar
+BIF Burundian Franc
+BMD Bermudan Dollar
+BND Brunei Dollar
+BOB Bolivian Boliviano
+BRL Brazilian Real
+BSD Bahamian Dollar
+BTN Bhutanese Ngultrum
+BWP Botswanan Pula
+BYN Belarusian Ruble
+BZD Belize Dollar
+CAD Canadian Dollar
+CDF Congolese Franc
+CHF Swiss Franc
+CLF Chilean Unit of Account
+CLP Chilean Peso
+CNH Chinese Yuan (offshore)
+CNY Chinese Yuan
+COP Colombian Peso
+CRC Costa Rican Colón
+CUP Cuban Peso
+CVE Cape Verdean Escudo
+CZK Czech Koruna
+DJF Djiboutian Franc
+DKK Danish Krone
+DOP Dominican Peso
+DZD Algerian Dinar
+EGP Egyptian Pound
+ERN Eritrean Nakfa
+ETB Ethiopian Birr
+EUR Euro
+FJD Fijian Dollar
+FKP Falkland Islands Pound
+FOK Faroese Króna
+GBP British Pound
+GEL Georgian Lari
+GGP Guernsey Pound
+GHS Ghanaian Cedi
+GIP Gibraltar Pound
+GMD Gambian Dalasi
+GNF Guinean Franc
+GTQ Guatemalan Quetzal
+GYD Guyanese Dollar
+HKD Hong Kong Dollar
+HNL Honduran Lempira
+HRK Croatian Kuna
+HTG Haitian Gourde
+HUF Hungarian Forint
+IDR Indonesian Rupiah
+ILS Israeli New Shekel
+IMP Manx Pound
+INR Indian Rupee
+IQD Iraqi Dinar
+IRR Iranian Rial
+ISK Icelandic Króna
+JEP Jersey Pound
+JMD Jamaican Dollar
+JOD Jordanian Dinar
+JPY Japanese Yen
+KES Kenyan Shilling
+KGS Kyrgyzstani Som
+KHR Cambodian Riel
+KID Kiribati Dollar
+KMF Comorian Franc
+KRW South Korean Won
+KWD Kuwaiti Dinar
+KYD Cayman Islands Dollar
+KZT Kazakhstani Tenge
+LAK Lao Kip
+LBP Lebanese Pound
+LKR Sri Lankan Rupee
+LRD Liberian Dollar
+LSL Lesotho Loti
+LYD Libyan Dinar
+MAD Moroccan Dirham
+MDL Moldovan Leu
+MGA Malagasy Ariary
+MKD Macedonian Denar
+MMK Myanmar Kyat
+MNT Mongolian Tugrik
+MOP Macanese Pataca
+MRU Mauritanian Ouguiya
+MUR Mauritian Rupee
+MVR Maldivian Rufiyaa
+MWK Malawian Kwacha
+MXN Mexican Peso
+MYR Malaysian Ringgit
+MZN Mozambican Metical
+NAD Namibian Dollar
+NGN Nigerian Naira
+NIO Nicaraguan Córdoba
+NOK Norwegian Krone
+NPR Nepalese Rupee
+NZD New Zealand Dollar
+OMR Omani Rial
+PAB Panamanian Balboa
+PEN Peruvian Sol
+PGK Papua New Guinean Kina
+PHP Philippine Peso
+PKR Pakistani Rupee
+PLN Polish Złoty
+PYG Paraguayan Guaraní
+QAR Qatari Riyal
+RON Romanian Leu
+RSD Serbian Dinar
+RUB Russian Ruble
+RWF Rwandan Franc
+SAR Saudi Riyal
+SBD Solomon Islands Dollar
+SCR Seychellois Rupee
+SDG Sudanese Pound
+SEK Swedish Krona
+SGD Singapore Dollar
+SHP Saint Helena Pound
+SLE Sierra Leonean Leone
+SLL Sierra Leonean Leone (old)
+SOS Somali Shilling
+SRD Surinamese Dollar
+SSP South Sudanese Pound
+STN São Tomé and Príncipe Dobra
+SYP Syrian Pound
+SZL Swazi Lilangeni
+THB Thai Baht
+TJS Tajikistani Somoni
+TMT Turkmenistani Manat
+TND Tunisian Dinar
+TOP Tongan Paʻanga
+TRY Turkish Lira
+TTD Trinidad and Tobago Dollar
+TVD Tuvaluan Dollar
+TWD New Taiwan Dollar
+TZS Tanzanian Shilling
+UAH Ukrainian Hryvnia
+UGX Ugandan Shilling
+USD US Dollar
+UYU Uruguayan Peso
+UZS Uzbekistani Som
+VES Venezuelan Bolívar
+VND Vietnamese Dong
+VUV Vanuatu Vatu
+WST Samoan Tala
+XAF Central African CFA Franc
+XCD East Caribbean Dollar
+XCG Caribbean Guilder
+XDR Special Drawing Rights
+XOF West African CFA Franc
+XPF CFP Franc
+YER Yemeni Rial
+ZAR South African Rand
+ZMW Zambian Kwacha
+ZWG Zimbabwe Gold
+ZWL Zimbabwean Dollar
+'''.strip().splitlines())
 YEN_TEXT = 0x2114FD0
 
 
@@ -445,7 +615,7 @@ def set_symbol(d, spec):
     return bytes(d)
 
 
-def patch(data, rate, code, log=print):
+def patch(data, rate, code, sym, log=print):
     rom = Rom(data)
     arm9 = bytearray(rom.arm9())
     base = 0x02000000
@@ -482,7 +652,8 @@ def patch(data, rate, code, log=print):
         rom.put_file(fid, bytes(blob))
         struct.pack_into('<I', rom.d, ent + 28, 0)
     files = rom.files()
-    spec = SYMBOL.get(code, (0xA4, None, 0))
+    char, cp, letter, bars = SYMBOL.get(code, DEFAULT)
+    spec = (ord(sym), None, 0) if sym != char else (cp, letter, bars)
     s, e = rom.fat(files[FONTS[0]])
     bits = symbol(lz10(bytes(rom.d[s:e])), spec)[0]
     pat = [''.join('#' if bits[j * 7 + i] else '.' for i in range(7)) for j in range(7)]
@@ -509,30 +680,44 @@ class App(tk.Tk):
         super().__init__()
         self.title('Tomodachi currency')
         self.path = tk.StringVar()
-        self.code = tk.StringVar(value='EUR')
+        self.choice = tk.StringVar()
+        self.symbol = tk.StringVar()
         self.info = tk.StringVar()
         try:
             self.rates = fetch_rates()
         except Exception as e:
             self.rates = {}
             messagebox.showerror('Rates', f'Rate API unavailable:\n{e}')
+        self.names = [f'{c}  {NAMES.get(c, "")}' for c in sorted(self.rates)]
         frame = tk.Frame(self, padx=10, pady=10)
         frame.pack()
         tk.Button(frame, text='Open ROM', command=self.open_rom).grid(row=0, column=0, sticky='w')
         tk.Label(frame, textvariable=self.path, width=48, anchor='w').grid(row=0, column=1, columnspan=2)
         tk.Label(frame, text='Currency').grid(row=1, column=0, sticky='w', pady=8)
-        combo = ttk.Combobox(frame, textvariable=self.code, values=sorted(self.rates), state='readonly', width=8)
-        combo.grid(row=1, column=1, sticky='w')
-        combo.bind('<<ComboboxSelected>>', lambda e: self.show())
-        tk.Label(frame, textvariable=self.info).grid(row=1, column=2, sticky='w')
-        tk.Button(frame, text='Patch ROM', command=self.run).grid(row=2, column=0, sticky='w')
+        combo = ttk.Combobox(frame, textvariable=self.choice, values=self.names, state='readonly', width=36)
+        combo.grid(row=1, column=1, columnspan=2, sticky='w')
+        combo.bind('<<ComboboxSelected>>', lambda e: self.pick())
+        tk.Label(frame, text='Symbol').grid(row=2, column=0, sticky='w')
+        tk.Entry(frame, textvariable=self.symbol, width=4).grid(row=2, column=1, sticky='w')
+        tk.Button(frame, text='Reset', command=self.reset).grid(row=2, column=2, sticky='w')
+        tk.Label(frame, textvariable=self.info).grid(row=3, column=0, columnspan=3, sticky='w')
+        tk.Button(frame, text='Patch ROM', command=self.run).grid(row=4, column=0, sticky='w')
         self.status = tk.Label(frame, text='', anchor='w')
-        self.status.grid(row=2, column=1, columnspan=2, sticky='w')
-        self.show()
+        self.status.grid(row=4, column=1, columnspan=2, sticky='w')
+        self.choice.set(next((n for n in self.names if n.startswith('EUR ')), self.names[0] if self.names else ''))
+        self.pick()
 
-    def show(self):
-        rate = self.rates.get(self.code.get())
-        self.info.set(f'1 {self.code.get()} = {1 / rate:,.2f} JPY' if rate else '')
+    def code(self):
+        return self.choice.get().split()[0] if self.choice.get() else ''
+
+    def pick(self):
+        code = self.code()
+        self.symbol.set(SYMBOL.get(code, DEFAULT)[0])
+        rate = self.rates.get(code)
+        self.info.set(f'1 {code} = {1 / rate:,.2f} JPY' if rate else '')
+
+    def reset(self):
+        self.symbol.set(SYMBOL.get(self.code(), DEFAULT)[0])
 
     def open_rom(self):
         path = filedialog.askopenfilename(filetypes=[('Nintendo DS ROM', '*.nds')])
@@ -544,15 +729,18 @@ class App(tk.Tk):
         self.update()
 
     def run(self):
-        code = self.code.get()
-        if not self.path.get() or code not in self.rates:
+        code, sym = self.code(), self.symbol.get()
+        if not self.path.get() or not code:
+            return
+        if len(sym) != 1:
+            messagebox.showerror('Symbol', 'One character only.')
             return
         out = filedialog.asksaveasfilename(defaultextension='.nds', initialfile=f'tomodachi_{code}.nds')
         if not out:
             return
         try:
             with open(self.path.get(), 'rb') as f:
-                result = patch(f.read(), self.rates[code], code, self.log)
+                result = patch(f.read(), self.rates[code], code, sym, self.log)
             with open(out, 'wb') as f:
                 f.write(result)
             self.log('Done')
