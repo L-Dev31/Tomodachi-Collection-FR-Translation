@@ -21,7 +21,6 @@ SITES = {
     100: [(0x2149EBC, PLAIN)],
 }
 YEN = ['#######', '#..#..#', '#..#..#', '#######', '#.....#', '#.....#', '#....##']
-EURO = ['..###..', '.#...#.', '####...', '.#.....', '####...', '.#...#.', '..###..']
 LIST_YEN = [(2, 32, 38, 97), (2, 32, 226, 59), (2, 32, 176, 87), (2, 32, 193, 132)]
 GLYPHS = {
     '/Scn/List/List_AlbumList_LZ.bin': LIST_YEN,
@@ -42,6 +41,28 @@ GLYPHS = {
     '/Scn/Scene/SceneWriteSong_LZ.bin': [(3, 32, 38, 97), (3, 32, 178, 83), (3, 32, 177, 124)],
 }
 FONTS = ['/Cmn/Font/FontLD08x_LZ.bin', '/Cmn/Font/FontLD10x_LZ.bin', '/Cmn/Font/FontLD12x_LZ.bin']
+SYMBOL = {}
+for codes, spec in (
+        ('USD AUD CAD HKD NZD SGD TWD ARS BSD BBD BMD BZD BND CLP COP CUP DOP FJD GYD JMD KYD LRD MXN NAD SBD SRD TTD TVD UYU XCD ZWL', (0x24, None, 0)),
+        ('GBP EGP FKP GIP SHP GGP IMP JEP LBP SYP SSP', (0xA3, 'L', 1)),
+        ('JPY CNY CNH', (0xFFE5, None, 0)),
+        ('EUR', (0x20AC, 'C', 2)),
+        ('ANG AWG', (0x192, 'f', 0)),
+        ('KRW', (None, 'W', 2)),
+        ('INR', (None, 'R', 2)),
+        ('RUB PHP', (None, 'P', 2)),
+        ('TRY', (None, 'L', 2)),
+        ('VND', (None, 'D', 2)),
+        ('NGN', (None, 'N', 2)),
+        ('KZT', (None, 'T', 1)),
+        ('MNT', (None, 'T', 2)),
+        ('GHS', (None, 'C', 1)),
+        ('CRC', (None, 'C', 2)),
+        ('PYG', (None, 'G', 2)),
+        ('LAK', (None, 'K', 2)),
+):
+    for code in codes.split():
+        SYMBOL[code] = spec
 YEN_TEXT = 0x2114FD0
 
 
@@ -318,7 +339,7 @@ def narc(d):
     return [(u32(d, fat + 12 + i * 8) + gm + 8) for i in range(u16(d, fat + 8))]
 
 
-def euro_glyphs(d, hits):
+def symbol_pictures(d, hits, pat):
     d = bytearray(d)
     starts = narc(d)
     for sub, w, x, y in hits:
@@ -340,7 +361,7 @@ def euro_glyphs(d, hits):
         bg = max(set(rest), key=rest.count)
         for i, j in cells:
             o, sh = at(x + i, y + j)
-            v = ink if EURO[j][i] == '#' else bg
+            v = ink if pat[j][i] == '#' else bg
             d[o] = (d[o] & (0xF0 >> sh)) | (v << sh)
     return bytes(d)
 
@@ -371,31 +392,60 @@ def glyph_index(d, maps, code):
     return None
 
 
-def euro_font(d):
-    d = bytearray(d)
+def cell(d):
     blocks = font_blocks(d)
     plgc, hdwc = blocks[b'PLGC'][0], blocks[b'HDWC'][0]
-    csz = u16(d, plgc + 10)
-    yen = glyph_index(d, blocks[b'PAMC'], 0xFFE5)
-    euro = glyph_index(d, blocks[b'PAMC'], 0x20AC)
-    if yen is None:
-        raise RuntimeError('unexpected font')
-    if euro is None:
-        bits = ''.join('1' if c == '#' else '0' for row in EURO for c in row).ljust(csz * 8, '0')
-        bitmap, metrics = bytes(int(bits[i:i + 8], 2) for i in range(0, csz * 8, 8)), bytes([0, 6, 7])
-    else:
-        o = plgc + 16 + euro * csz
-        bitmap = bytes(d[o:o + csz])
-        o = hdwc + 16 + (euro - u16(d, hdwc + 8)) * 3
-        metrics = bytes(d[o:o + 3])
-    o = plgc + 16 + yen * csz
-    d[o:o + csz] = bitmap
-    o = hdwc + 16 + (yen - u16(d, hdwc + 8)) * 3
+    return plgc, hdwc, blocks[b'PAMC'], d[plgc + 8], d[plgc + 9], u16(d, plgc + 10)
+
+
+def glyph_bits(d, plgc, cw, ch, csz, g):
+    raw = d[plgc + 16 + g * csz:plgc + 16 + (g + 1) * csz]
+    return [(raw[i // 8] >> (7 - i % 8)) & 1 for i in range(cw * ch)]
+
+
+def glyph_metrics(d, hdwc, g):
+    o = hdwc + 16 + (g - u16(d, hdwc + 8)) * 3
+    return bytes(d[o:o + 3])
+
+
+def symbol(d, spec):
+    cp, letter, bars = spec
+    plgc, hdwc, maps, cw, ch, csz = cell(d)
+    g = glyph_index(d, maps, cp) if cp is not None else None
+    if g is not None:
+        return glyph_bits(d, plgc, cw, ch, csz, g), glyph_metrics(d, hdwc, g)
+    if letter:
+        g = glyph_index(d, maps, ord(letter))
+        bits = glyph_bits(d, plgc, cw, ch, csz, g)
+        for k in range(bars):
+            y = ch * (k + 1) // (bars + 1)
+            bits[y * cw:(y + 1) * cw] = [1] * cw
+        return bits, glyph_metrics(d, hdwc, g)
+    g = glyph_index(d, maps, ord('o'))
+    bits = glyph_bits(d, plgc, cw, ch, csz, g)
+    ink = [i for i, v in enumerate(bits) if v]
+    xs, ys = [i % cw for i in ink], [i // cw for i in ink]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    mx, my = (x0 + x1) // 2, (y0 + y1) // 2
+    for x, y in ((x0 - 1, my), (x1 + 1, my), (mx, y0 - 1), (mx, y1 + 1)):
+        if 0 <= x < cw and 0 <= y < ch:
+            bits[y * cw + x] = 1
+    return bits, glyph_metrics(d, hdwc, g)
+
+
+def set_symbol(d, spec):
+    d = bytearray(d)
+    plgc, hdwc, maps, cw, ch, csz = cell(d)
+    g = glyph_index(d, maps, 0xFFE5)
+    bits, metrics = symbol(d, spec)
+    bits = bits + [0] * (csz * 8 - len(bits))
+    d[plgc + 16 + g * csz:plgc + 16 + (g + 1) * csz] = bytes(int(''.join(map(str, bits[i:i + 8])), 2) for i in range(0, csz * 8, 8))
+    o = hdwc + 16 + (g - u16(d, hdwc + 8)) * 3
     d[o:o + 3] = metrics
     return bytes(d)
 
 
-def patch(data, rate, log=print):
+def patch(data, rate, code, log=print):
     rom = Rom(data)
     arm9 = bytearray(rom.arm9())
     base = 0x02000000
@@ -432,16 +482,20 @@ def patch(data, rate, log=print):
         rom.put_file(fid, bytes(blob))
         struct.pack_into('<I', rom.d, ent + 28, 0)
     files = rom.files()
+    spec = SYMBOL.get(code, (0xA4, None, 0))
+    s, e = rom.fat(files[FONTS[0]])
+    bits = symbol(lz10(bytes(rom.d[s:e])), spec)[0]
+    pat = [''.join('#' if bits[j * 7 + i] else '.' for i in range(7)) for j in range(7)]
     for path in FONTS:
         log(path)
         fid = files[path]
         s, e = rom.fat(fid)
-        rom.put_file(fid, lz10c(euro_font(lz10(bytes(rom.d[s:e])))))
-    for path, hits in GLYPHS.items():
+        rom.put_file(fid, lz10c(set_symbol(lz10(bytes(rom.d[s:e])), spec)))
+    for path, hits in (GLYPHS.items() if spec[0] != 0xFFE5 else []):
         log(path)
         fid = files[path]
         s, e = rom.fat(fid)
-        rom.put_file(fid, lz10c(euro_glyphs(lz10(bytes(rom.d[s:e])), hits)))
+        rom.put_file(fid, lz10c(symbol_pictures(lz10(bytes(rom.d[s:e])), hits, pat)))
     return rom.save()
 
 
@@ -498,7 +552,7 @@ class App(tk.Tk):
             return
         try:
             with open(self.path.get(), 'rb') as f:
-                result = patch(f.read(), self.rates[code], self.log)
+                result = patch(f.read(), self.rates[code], code, self.log)
             with open(out, 'wb') as f:
                 f.write(result)
             self.log('Done')
