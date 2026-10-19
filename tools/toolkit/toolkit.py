@@ -1,3 +1,5 @@
+import os
+import collections
 import json
 import math
 import struct
@@ -40,6 +42,13 @@ GLYPHS = {
     '/Scn/Scene/SceneTestNg136_LZ.bin': [(1, 32, 176, 87)],
     '/Scn/Scene/SceneWriteSong_LZ.bin': [(3, 32, 38, 97), (3, 32, 178, 83), (3, 32, 177, 124)],
 }
+KEYBOARDS = ['Japanese', 'QWERTY', 'Accents', 'Symbols', 'Emojis']
+KB_KIND = {'Japanese': 1, 'QWERTY': 0, 'Accents': 2, 'Symbols': 3, 'Emojis': 4}
+KB_ICON = {'Japanese': 5, 'QWERTY': 0, 'Accents': 6, 'Symbols': 7, 'Emojis': 8}
+KB_MAP = 0x20B7AD4
+KB_STORES = (0x2081BF4, 0x2081BF8, 0x2081BFC)
+KB_START = 0x2081AA4
+KB_FILE = '/Cmn/Kbd/SoftKeyboard_LZ.bin'
 FONTS = ['/Cmn/Font/FontLD08x_LZ.bin', '/Cmn/Font/FontLD10x_LZ.bin', '/Cmn/Font/FontLD12x_LZ.bin']
 SYMBOL = {}
 for codes, spec in (
@@ -646,16 +655,143 @@ def set_symbol(d, spec):
     return bytes(d)
 
 
-def patch(data, rate, code, sym, whole=True, log=print):
+REQUIREMENTS = (
+    "Converted automatically:\n"
+    "\u2022 PNG or GIF (no JPG)\n"
+    "\u2022 Any size, fitted to 32x32\n"
+    "  (transparent padding if not square)\n"
+    "\u2022 15 colours + transparent\n"
+    "  (more are reduced)"
+)
+LANGS = ['Japanese', 'English', 'French', 'German', 'Italian', 'Spanish']
+
+
+def icon_grid(tiles, pal):
+    out = []
+    for y in range(32):
+        row = []
+        for x in range(32):
+            v = tiles[((y // 8) * 4 + x // 8) * 32 + (y % 8) * 4 + (x % 8) // 2]
+            v = v >> 4 if x % 2 else v & 15
+            c = u16(pal, v * 2)
+            row.append(None if not v else '#%02x%02x%02x' % ((c & 31) * 255 // 31, (c >> 5 & 31) * 255 // 31, (c >> 10 & 31) * 255 // 31))
+        out.append(row)
+    return out
+
+
+def banner_pixels(data):
+    b = u32(data, 0x68)
+    return icon_grid(data[b + 0x20:b + 0x220], data[b + 0x220:b + 0x240])
+
+
+def banner_read(data):
+    b = u32(data, 0x68)
+    titles = {n: bytes(data[b + 0x240 + i * 0x100:b + 0x340 + i * 0x100]).decode('utf-16le', 'replace').split('\0')[0] for i, n in enumerate(LANGS)}
+    return titles, bytes(data[0:12]).decode('ascii', 'replace').rstrip('\0')
+
+
+def fit32(w, h, pixels):
+    s = 32 / max(w, h)
+    nw, nh = max(1, round(w * s)), max(1, round(h * s))
+    ox, oy = (32 - nw) // 2, (32 - nh) // 2
+    out = [(0, 0, 0, 0)] * 1024
+    for y in range(nh):
+        for x in range(nw):
+            out[(oy + y) * 32 + ox + x] = pixels[(y * h // nh) * w + x * w // nw]
+    return out
+
+
+def quantize(pixels):
+    colors = [(r >> 3, g >> 3, b >> 3) for r, g, b, a in pixels if a >= 128]
+    pal = [c for c, _ in collections.Counter(colors).most_common(15)]
+    out = bytearray(512)
+    for n, (r, g, b, a) in enumerate(pixels):
+        v = 0
+        if a >= 128:
+            v = 1 + min(range(len(pal)), key=lambda k: (pal[k][0] - (r >> 3)) ** 2 + (pal[k][1] - (g >> 3)) ** 2 + (pal[k][2] - (b >> 3)) ** 2)
+        x, y = n % 32, n // 32
+        out[((y // 8) * 4 + x // 8) * 32 + (y % 8) * 4 + (x % 8) // 2] |= v << 4 if x % 2 else v
+    return bytes(out), struct.pack('<16H', 0, *[c[0] | c[1] << 5 | c[2] << 10 for c in pal], *[0] * (15 - len(pal)))
+
+
+def meta(rom, cfg, log):
+    d = rom.d
+    b = u32(d, 0x68)
+    for name, text in cfg.get('titles', {}).items():
+        raw = text.encode('utf-16le')
+        if len(raw) > 0x100:
+            raise RuntimeError(f'{name} title is too long')
+        o = b + 0x240 + LANGS.index(name) * 0x100
+        d[o:o + 0x100] = raw.ljust(0x100, b'\0')
+    if 'icon' in cfg:
+        d[b + 0x20:b + 0x220], d[b + 0x220:b + 0x240] = cfg['icon']
+    if 'internal' in cfg:
+        d[0:12] = cfg['internal'].encode('ascii').ljust(12, b'\0')
+    for n, end in enumerate((0x840, 0x940, 0xA40)[:u16(d, b) & 0xFF]):
+        struct.pack_into('<H', d, b + 2 + n * 2, crc16(d, b + 0x20, b + end))
+
+
+def grey_to_white(r, g, b):
+    if max(r, g, b) - min(r, g, b) <= 40 and (r + g + b) // 3 > 120:
+        return '#ffffff'
+    return '#%02x%02x%02x' % (r, g, b)
+
+
+def kb_pixels(data):
     rom = Rom(data)
-    arm9 = bytearray(rom.arm9())
+    s, e = rom.fat(rom.files()[KB_FILE])
+    d = lz10(bytes(rom.d[s:e]))
+    starts = narc(d)
+    pal = starts[0] + 0x28
+    tiles = rgcn(d, starts[2])
+    out = {}
+    for name, block in KB_ICON.items():
+        rows = []
+        for y in range(16):
+            row = []
+            for x in range(16):
+                t = block * 4 + (y // 8) * 2 + x // 8
+                v = d[tiles + t * 32 + (y % 8) * 4 + (x % 8) // 2]
+                v = v >> 4 if x % 2 else v & 15
+                c = u16(d, pal + v * 2)
+                row.append(None if not v else grey_to_white((c & 31) * 255 // 31, (c >> 5 & 31) * 255 // 31, (c >> 10 & 31) * 255 // 31))
+            rows.append(row)
+        out[name] = rows
+    return out
+
+
+def keyboard(rom, arm9, order, log):
+    base = 0x02000000
+    if sorted(order) != sorted(KEYBOARDS):
+        raise RuntimeError('invalid keyboard order')
+    if [u32(arm9, a - base) for a in KB_STORES] != [0xE58D2000, 0xE58D1004, 0xE58D0008] or u32(arm9, KB_START - base) != 0xE3A00001:
+        raise RuntimeError('keyboard code not recognised (already reordered?)')
+    for a in KB_STORES:
+        struct.pack_into('<I', arm9, a - base, 0xE1A00000)
+    struct.pack_into('<5I', arm9, KB_MAP - base, *[KB_KIND[n] for n in order])
+    struct.pack_into('<I', arm9, KB_START - base, 0xE3A00000 | KB_KIND[order[0]])
+    log(KB_FILE)
+    fid = rom.files()[KB_FILE]
+    s, e = rom.fat(fid)
+    d = bytearray(lz10(bytes(rom.d[s:e])))
+    tiles = rgcn(d, narc(d)[2])
+    old = bytes(d)
+    for slot, name in enumerate(order):
+        dst = tiles + KB_ICON[KEYBOARDS[slot]] * 128
+        src = tiles + KB_ICON[name] * 128
+        d[dst:dst + 128] = old[src:src + 128]
+    rom.put_file(fid, lz10c(bytes(d)))
+
+
+def currency(rom, arm9, cfg, log):
+    rate, code, sym = cfg['rate'], cfg['code'], cfg['sym']
     base = 0x02000000
     thunks = {}
     pos = CAVE
     if any(arm9[CAVE - base:CAVE - base + 128]):
         raise RuntimeError('already patched or unsupported ROM')
     for target in (FMT, PLAIN):
-        blob = (cents_thunk if not whole and target == FMT else thunk)(pos, target, rate)
+        blob = (cents_thunk if target == FMT else thunk)(pos, target, rate)
         arm9[pos - base:pos - base + len(blob)] = blob
         thunks[target] = pos
         pos += len(blob)
@@ -671,7 +807,6 @@ def patch(data, rate, code, sym, whole=True, log=print):
     if bytes(arm9[YEN_TEXT - base:YEN_TEXT - base + 2]) != bytes([0x86, 0x51]):
         raise RuntimeError('unexpected yen text')
     arm9[YEN_TEXT - base:YEN_TEXT - base + 2] = bytes([0xE5, 0xFF])
-    rom.set_arm9(bytes(arm9))
     for oid, sites in SITES.items():
         if oid == 'arm9':
             continue
@@ -699,6 +834,18 @@ def patch(data, rate, code, sym, whole=True, log=print):
         fid = files[path]
         s, e = rom.fat(fid)
         rom.put_file(fid, lz10c(symbol_pictures(lz10(bytes(rom.d[s:e])), hits, pat)))
+
+
+def patch(data, cfg, log=print):
+    rom = Rom(data)
+    arm9 = bytearray(rom.arm9())
+    if 'currency' in cfg:
+        currency(rom, arm9, cfg['currency'], log)
+    if 'keyboard' in cfg:
+        keyboard(rom, arm9, cfg['keyboard'], log)
+    if 'meta' in cfg:
+        meta(rom, cfg['meta'], log)
+    rom.set_arm9(bytes(arm9))
     return rom.save()
 
 
@@ -707,56 +854,332 @@ def fetch_rates():
         return json.load(r)['rates']
 
 
+BG = '#FFF3D9'
+PANEL = '#FFFFFF'
+ORANGE = '#F7822B'
+DARK = '#D96A14'
+BROWN = '#5B3A1C'
+WARM = '#A39382'
+MUTED = '#9A7B5B'
+SAND = '#F6DDB0'
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('Tomodachi currency')
-        self.path = tk.StringVar()
+        self.title('Tomodachi Location Toolkit')
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        self.rom = None
         self.choice = tk.StringVar()
         self.symbol = tk.StringVar()
         self.info = tk.StringVar()
-        self.whole = tk.BooleanVar(value=True)
+        self.order = list(KEYBOARDS)
+        self.icons = {}
+        self.lang = tk.StringVar(value='English')
+        self.internal = tk.StringVar()
+        self.cur = 'English'
+        self.icon_new = None
         try:
             self.rates = fetch_rates()
         except Exception as e:
             self.rates = {}
             messagebox.showerror('Rates', f'Rate API unavailable:\n{e}')
         self.names = [f'{c}  {NAMES.get(c, "")}' for c in sorted(self.rates)]
-        frame = tk.Frame(self, padx=10, pady=10)
-        frame.pack()
-        tk.Label(frame, text='Currency').grid(row=0, column=0, sticky='w', pady=4)
-        combo = ttk.Combobox(frame, textvariable=self.choice, values=self.names, state='readonly', width=36)
-        combo.grid(row=0, column=1, columnspan=2, sticky='w')
-        combo.bind('<<ComboboxSelected>>', lambda e: self.pick())
-        tk.Label(frame, text='Symbol').grid(row=1, column=0, sticky='w', pady=4)
-        tk.Entry(frame, textvariable=self.symbol, width=4).grid(row=1, column=1, sticky='w')
-        tk.Button(frame, text='Reset', command=self.reset).grid(row=1, column=2, sticky='w')
-        tk.Checkbutton(frame, text='Round to whole units', variable=self.whole).grid(row=2, column=0, columnspan=3, sticky='w', pady=4)
-        tk.Label(frame, textvariable=self.info).grid(row=3, column=0, columnspan=3, sticky='w')
-        tk.Label(frame, textvariable=self.path, width=48, anchor='w').grid(row=4, column=0, columnspan=3, sticky='w', pady=(12, 0))
-        tk.Button(frame, text='Open ROM', command=self.open_rom).grid(row=5, column=0, sticky='w', pady=4)
-        tk.Button(frame, text='Patch ROM', command=self.run).grid(row=5, column=1, sticky='w', pady=4)
-        self.status = tk.Label(frame, text='', anchor='w')
-        self.status.grid(row=6, column=0, columnspan=3, sticky='w')
-        self.choice.set(next((n for n in self.names if n.startswith('EUR ')), self.names[0] if self.names else ''))
+        self.style()
+        self.tabs = ttk.Notebook(self)
+        self.tabs.pack(fill='both', padx=12, pady=(12, 0))
+        self.tabs.add(self.rom_tab(self.tabs), text='  ROM  ')
+        self.tabs.add(self.meta_tab(self.tabs), text='  Meta  ')
+        self.tabs.add(self.currency_tab(self.tabs), text='  Currency  ')
+        self.tabs.add(self.keyboard_tab(self.tabs), text='  Keyboard  ')
+        footer = tk.Frame(self, bg=BG, pady=10)
+        footer.pack(fill='x')
+        tk.Label(footer, text='2026 by L-DEV31 - TomoDS Team', bg=BG, fg=DARK, font=('Segoe UI', 9)).pack()
+        self.choice.set(next((n for n in self.names if n.startswith('JPY ')), self.names[0] if self.names else ''))
+        self.lock()
         self.pick()
+
+    def lock(self):
+        on = self.rom is not None
+        for index in (1, 2, 3):
+            self.tabs.tab(index, state='normal' if on else 'disabled')
+        self.patch_btn.state(['!disabled'] if on else ['disabled'])
+
+    def rom_tab(self, parent):
+        page = ttk.Frame(parent, padding=14)
+        self.rom_name = tk.StringVar(value='No ROM loaded')
+        self.rom_dir = tk.StringVar(value='Open a Tomodachi Collection .nds file to unlock the other tabs.')
+        self.rom_size = tk.StringVar()
+        self.sum_currency = tk.StringVar()
+        self.sum_keyboard = tk.StringVar()
+        self.sum_meta = tk.StringVar()
+        card = tk.Frame(page, bg=PANEL, highlightthickness=1, highlightbackground=SAND, padx=14, pady=14)
+        card.pack(fill='x')
+        holder = tk.Frame(card, width=64, height=64, bg=WARM)
+        holder.pack_propagate(False)
+        holder.grid(row=0, column=0, rowspan=3, sticky='n')
+        self.badge = tk.Label(holder, text='?', bg=WARM, fg='white', font=('Segoe UI', 22, 'bold'), bd=0)
+        self.badge.place(relx=0.5, rely=0.5, anchor='center')
+        tk.Label(card, textvariable=self.rom_name, bg=PANEL, fg=BROWN, font=('Segoe UI', 11, 'bold'), anchor='w').grid(row=0, column=1, sticky='w', padx=12)
+        tk.Label(card, textvariable=self.rom_dir, bg=PANEL, fg=MUTED, font=('Segoe UI', 8), anchor='w', justify='left', wraplength=210).grid(row=1, column=1, sticky='w', padx=12)
+        tk.Label(card, textvariable=self.rom_size, bg=PANEL, fg=DARK, font=('Segoe UI', 9, 'bold'), anchor='w').grid(row=2, column=1, sticky='w', padx=12)
+        self.open_btn = ttk.Button(card, text='Open ROM', style='Accent.TButton', command=self.open_rom)
+        self.open_btn.grid(row=0, column=2, rowspan=3, sticky='e')
+        card.columnconfigure(1, weight=1)
+        info = tk.Frame(page, bg=PANEL, highlightthickness=1, highlightbackground=SAND, padx=14, pady=12)
+        info.pack(fill='x', pady=(12, 0))
+        tk.Label(info, text='WILL BE APPLIED', bg=PANEL, fg=DARK, font=('Segoe UI', 8, 'bold')).grid(row=0, column=0, columnspan=2, sticky='w')
+        for r, (label, var) in enumerate((('Meta', self.sum_meta), ('Currency', self.sum_currency), ('Keyboard', self.sum_keyboard)), 1):
+            tk.Label(info, text=label, bg=PANEL, fg=MUTED, font=('Segoe UI', 9), anchor='w', width=9).grid(row=r, column=0, sticky='nw', pady=(8, 0))
+            tk.Label(info, textvariable=var, bg=PANEL, fg=BROWN, font=('Segoe UI', 9, 'bold'), anchor='w', justify='left', wraplength=290).grid(row=r, column=1, sticky='w', pady=(8, 0))
+        self.patch_btn = ttk.Button(page, text='Patch ROM', style='Big.TButton', command=self.run)
+        self.patch_btn.pack(fill='x', pady=(14, 0))
+        self.status = tk.Label(page, text='', bg=BG, fg=DARK, font=('Segoe UI', 9))
+        self.status.pack(pady=(8, 0))
+        self.symbol.trace_add('write', lambda *_: self.refresh_summary())
+        return page
+
+    def show_rom(self, path, data):
+        img = tk.PhotoImage(master=self, width=32, height=32)
+        for y, row in enumerate(banner_pixels(data)):
+            img.put('{' + ' '.join(c or PANEL for c in row) + '}', to=(0, y))
+        self.banner = img.zoom(2)
+        self.badge.config(image=self.banner, text='', bg=PANEL)
+        folder = os.path.dirname(path)
+        self.rom_name.set(os.path.basename(path))
+        self.rom_dir.set(folder if len(folder) <= 42 else '\u2026' + folder[-41:])
+        self.rom_size.set(f'{os.path.getsize(path) / 1048576:.1f} MB')
+        self.open_btn.config(text='Change ROM', style='Soft.TButton')
+
+    def meta_tab(self, parent):
+        page = ttk.Frame(parent, padding=14)
+        card = tk.Frame(page, bg=PANEL, highlightthickness=1, highlightbackground=SAND, padx=14, pady=14)
+        card.pack(fill='x')
+        self.meta_badge = tk.Label(card, bg=PANEL, bd=0)
+        self.meta_badge.grid(row=0, column=0, rowspan=2, sticky='n')
+        ttk.Button(card, text='Change icon', style='Accent.TButton', command=self.change_icon).grid(row=0, column=1, padx=16, sticky='w')
+        ttk.Button(card, text='Reset icon', style='Soft.TButton', command=self.reset_icon).grid(row=1, column=1, padx=16, pady=(6, 0), sticky='w')
+        tk.Label(card, text=REQUIREMENTS, bg=PANEL, fg=MUTED, font=('Segoe UI', 8), justify='left').grid(row=0, column=2, rowspan=2, sticky='w')
+        box = tk.Frame(page, bg=PANEL, highlightthickness=1, highlightbackground=SAND, padx=14, pady=12)
+        box.pack(fill='x', pady=(12, 0))
+        tk.Label(box, text='GAME TITLE', bg=PANEL, fg=DARK, font=('Segoe UI', 8, 'bold')).grid(row=0, column=0, sticky='w')
+        lang_box = ttk.Combobox(box, textvariable=self.lang, values=LANGS, state='readonly', width=10)
+        lang_box.grid(row=0, column=1, sticky='e')
+        lang_box.bind('<<ComboboxSelected>>', lambda e: self.show_title())
+        self.title_text = tk.Text(box, height=3, width=40, wrap='none', bg='#FFFDF8', fg=BROWN, relief='flat', highlightthickness=1,
+                                  highlightbackground=SAND, font=('Segoe UI', 10), padx=8, pady=6)
+        self.title_text.grid(row=1, column=0, columnspan=2, pady=(8, 0))
+        self.title_text.bind('<KeyRelease>', lambda e: self.refresh_summary())
+        ttk.Button(box, text='Apply to all languages', style='Soft.TButton', command=self.apply_all).grid(row=2, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        tk.Label(box, text='INTERNAL NAME (12 CHARACTERS)', bg=PANEL, fg=DARK, font=('Segoe UI', 8, 'bold')).grid(row=3, column=0, columnspan=2, sticky='w', pady=(12, 0))
+        ttk.Entry(box, textvariable=self.internal, width=18).grid(row=4, column=0, columnspan=2, sticky='w', pady=(6, 0))
+        self.internal.trace_add('write', lambda *_: self.refresh_summary())
+        return page
+
+    def keep_title(self):
+        self.titles[self.cur] = self.title_text.get('1.0', 'end-1c')
+
+    def apply_all(self):
+        self.keep_title()
+        for n in LANGS:
+            self.titles[n] = self.titles[self.cur]
+        self.refresh_summary()
+
+    def show_title(self):
+        self.keep_title()
+        self.cur = self.lang.get()
+        self.title_text.delete('1.0', 'end')
+        self.title_text.insert('end', self.titles[self.cur])
+
+    def load_meta(self, data):
+        b = u32(data, 0x68)
+        self.titles, name = banner_read(data)
+        self.orig_titles = dict(self.titles)
+        self.orig_internal = name
+        self.orig_icon = (bytes(data[b + 0x20:b + 0x220]), bytes(data[b + 0x220:b + 0x240]))
+        self.icon_new = None
+        self.cur = self.lang.get()
+        self.title_text.delete('1.0', 'end')
+        self.title_text.insert('end', self.titles[self.cur])
+        self.internal.set(name)
+        self.draw_icon(self.orig_icon)
+
+    def draw_icon(self, icon):
+        img = tk.PhotoImage(master=self, width=32, height=32)
+        for y, row in enumerate(icon_grid(*icon)):
+            img.put('{' + ' '.join(c or PANEL for c in row) + '}', to=(0, y))
+        self.meta_img = img.zoom(2)
+        self.meta_badge.config(image=self.meta_img)
+
+    def read_pixels(self, path):
+        img = tk.PhotoImage(master=self, file=path)
+        k = (max(img.width(), img.height()) + 31) // 32
+        if k > 1:
+            img = img.subsample(k)
+        w, h = img.width(), img.height()
+        pixels = [(*img.get(x, y), 0 if img.transparency_get(x, y) else 255) for y in range(h) for x in range(w)]
+        return fit32(w, h, pixels)
+
+    def change_icon(self):
+        path = filedialog.askopenfilename(filetypes=[('Image', '*.png *.gif')])
+        if not path:
+            return
+        try:
+            icon = quantize(self.read_pixels(path))
+        except Exception as e:
+            messagebox.showerror('Icon', str(e))
+            return
+        self.icon_new = icon
+        self.draw_icon(icon)
+        self.refresh_summary()
+
+    def reset_icon(self):
+        self.icon_new = None
+        self.draw_icon(self.orig_icon)
+        self.refresh_summary()
+
+    def meta_cfg(self):
+        self.keep_title()
+        cfg = {}
+        titles = {n: t for n, t in self.titles.items() if t != self.orig_titles[n]}
+        if titles:
+            cfg['titles'] = titles
+        if self.icon_new:
+            cfg['icon'] = self.icon_new
+        name = self.internal.get().strip()
+        if name != self.orig_internal:
+            if len(name) > 12 or not name.isascii():
+                raise ValueError('Internal name: 12 ASCII characters max.')
+            cfg['internal'] = name
+        return cfg
+
+    def refresh_summary(self):
+        if self.rom is None:
+            self.sum_meta.set('Unchanged')
+        else:
+            try:
+                names = {'titles': 'Title', 'icon': 'Icon', 'internal': 'Name'}
+                self.sum_meta.set(', '.join(names[k] for k in self.meta_cfg()) or 'Unchanged')
+            except ValueError as e:
+                self.sum_meta.set(str(e))
+        code = self.code()
+        self.sum_currency.set(f'{code}  {self.symbol.get()}' if code else 'unavailable')
+        self.sum_keyboard.set('Default order' if self.order == KEYBOARDS else '  \u203a  '.join(self.order))
+
+    def style(self):
+        s = ttk.Style(self)
+        s.theme_use('clam')
+        s.configure('TFrame', background=BG)
+        s.configure('TLabel', background=BG, foreground=BROWN)
+        s.configure('TCheckbutton', background=BG, foreground=BROWN)
+        s.map('TCheckbutton', background=[('active', BG)])
+        s.configure('TLabelframe', background=BG, bordercolor=SAND)
+        s.configure('TLabelframe.Label', background=BG, foreground=DARK, font=('Segoe UI', 9, 'bold'))
+        s.configure('TNotebook', background=BG, borderwidth=0)
+        s.configure('TNotebook.Tab', background=SAND, foreground=BROWN, padding=(14, 6), font=('Segoe UI', 10))
+        s.map('TNotebook.Tab', background=[('selected', ORANGE)], foreground=[('selected', 'white')])
+        s.configure('TCombobox', fieldbackground=PANEL, background=SAND)
+        s.configure('Accent.TButton', background=ORANGE, foreground='white', padding=(18, 6), font=('Segoe UI', 10, 'bold'), borderwidth=0)
+        s.map('Accent.TButton', background=[('active', DARK), ('disabled', SAND)], foreground=[('disabled', '#B9A07A')])
+        s.configure('Big.TButton', background=ORANGE, foreground='white', padding=(18, 11), font=('Segoe UI', 11, 'bold'), borderwidth=0)
+        s.map('Big.TButton', background=[('active', DARK), ('disabled', SAND)], foreground=[('disabled', '#B9A07A')])
+        s.configure('Soft.TButton', background=SAND, foreground=BROWN, padding=(14, 6), borderwidth=0)
+        s.map('Soft.TButton', background=[('active', '#EFCB8F')])
+
+    def currency_tab(self, parent):
+        page = ttk.Frame(parent, padding=14)
+        box = ttk.Labelframe(page, text='Currency', padding=12)
+        box.pack(fill='x', pady=(10, 0))
+        combo = ttk.Combobox(box, textvariable=self.choice, values=self.names, state='readonly', width=40)
+        combo.grid(row=0, column=0, columnspan=3, sticky='w')
+        combo.bind('<<ComboboxSelected>>', lambda e: self.pick())
+        ttk.Label(box, text='Symbol').grid(row=1, column=0, sticky='w', pady=(10, 0))
+        entry = ttk.Entry(box, textvariable=self.symbol, width=4, validate='key', validatecommand=(self.register(lambda s: len(s) <= 1), '%P'))
+        entry.grid(row=1, column=1, sticky='w', pady=(10, 0))
+        entry.bind('<FocusOut>', lambda e: self.symbol.get() or self.reset())
+        ttk.Button(box, text='Reset', style='Soft.TButton', command=self.reset).grid(row=1, column=2, sticky='w', pady=(10, 0))
+        ttk.Label(box, textvariable=self.info, foreground=DARK).grid(row=2, column=0, columnspan=3, sticky='w', pady=(10, 0))
+        return page
+
+    def keyboard_tab(self, parent):
+        page = ttk.Frame(parent, padding=14)
+        box = ttk.Labelframe(page, text='Tab order, top to bottom', padding=12)
+        box.pack(fill='x', pady=(10, 0))
+        self.rows = ttk.Frame(box)
+        self.rows.pack(anchor='w')
+        ttk.Button(box, text='Reset order', style='Soft.TButton', command=self.reset_order).pack(anchor='w', pady=(8, 0))
+        return page
+
+    def draw_order(self):
+        for w in self.rows.winfo_children():
+            w.destroy()
+        for i, name in enumerate(self.order):
+            row = ttk.Frame(self.rows)
+            row.pack(fill='x', pady=2)
+            holder = tk.Frame(row, width=54, height=54, bg=ORANGE)
+            holder.pack_propagate(False)
+            holder.pack(side='left')
+            tk.Label(holder, image=self.icons[name], bg=ORANGE, bd=0).place(relx=0.5, rely=0.5, anchor='center')
+            ttk.Label(row, text=name, width=12).pack(side='left', padx=10)
+            ttk.Button(row, text='▲', width=3, style='Soft.TButton', command=lambda i=i: self.move(i, -1)).pack(side='left', padx=(0, 4))
+            ttk.Button(row, text='▼', width=3, style='Soft.TButton', command=lambda i=i: self.move(i, 1)).pack(side='left')
+
+    def move(self, i, step):
+        j = i + step
+        if 0 <= j < len(self.order):
+            self.order[i], self.order[j] = self.order[j], self.order[i]
+            self.draw_order()
+            self.refresh_summary()
+
+    def reset_order(self):
+        self.order = list(KEYBOARDS)
+        self.draw_order()
+        self.refresh_summary()
+
+    def load_icons(self, data):
+        icons = {}
+        for name, rows in kb_pixels(data).items():
+            img = tk.PhotoImage(master=self, width=16, height=16)
+            for y, row in enumerate(rows):
+                img.put('{' + ' '.join(c or ORANGE for c in row) + '}', to=(0, y))
+            icons[name] = img.zoom(3)
+        return icons
 
     def code(self):
         return self.choice.get().split()[0] if self.choice.get() else ''
 
     def pick(self):
         code = self.code()
+        if not code:
+            return
         self.symbol.set(SYMBOL[code][0])
         rate = self.rates.get(code)
         self.info.set(f'1 {code} = {1 / rate:,.2f} JPY' if rate else '')
+        self.refresh_summary()
 
     def reset(self):
         self.symbol.set(SYMBOL[self.code()][0])
+        self.refresh_summary()
 
     def open_rom(self):
         path = filedialog.askopenfilename(filetypes=[('Nintendo DS ROM', '*.nds')])
-        if path:
-            self.path.set(path)
+        if not path:
+            return
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+            icons = self.load_icons(data)
+        except Exception as e:
+            messagebox.showerror('Not a Tomodachi ROM', str(e))
+            return
+        self.rom = path
+        self.icons = icons
+        self.show_rom(path, data)
+        self.load_meta(data)
+        self.status.config(text='')
+        self.draw_order()
+        self.lock()
 
     def log(self, text):
         self.status.config(text=text)
@@ -764,17 +1187,25 @@ class App(tk.Tk):
 
     def run(self):
         code, sym = self.code(), self.symbol.get()
-        if not self.path.get() or not code:
+        if not code:
+            messagebox.showerror('Rates', 'No exchange rates: check the network.')
             return
-        if len(sym) != 1:
-            messagebox.showerror('Symbol', 'One character only.')
+        cfg = {'currency': {'rate': self.rates[code], 'code': code, 'sym': sym}}
+        if self.order != KEYBOARDS:
+            cfg['keyboard'] = list(self.order)
+        try:
+            meta_cfg = self.meta_cfg()
+        except ValueError as e:
+            messagebox.showerror('Meta', str(e))
             return
-        out = filedialog.asksaveasfilename(defaultextension='.nds', initialfile=f'tomodachi_{code}.nds')
+        if meta_cfg:
+            cfg['meta'] = meta_cfg
+        out = filedialog.asksaveasfilename(defaultextension='.nds', initialfile='tomodachi_patched.nds')
         if not out:
             return
         try:
-            with open(self.path.get(), 'rb') as f:
-                result = patch(f.read(), self.rates[code], code, sym, self.whole.get(), self.log)
+            with open(self.rom, 'rb') as f:
+                result = patch(f.read(), cfg, self.log)
             with open(out, 'wb') as f:
                 f.write(result)
             self.log('Done')
