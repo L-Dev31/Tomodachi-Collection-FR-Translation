@@ -73,6 +73,19 @@ Current status (all 7 files): checks 1 to 5 pass.
 - `tmd_contents`: 1 empty message pointing at offset 0, same as above.
 - `tmd_etc`: tag `FF:000A` existed in the first committed version and is gone now. Check whether removing it was intended.
 
+## Yen figures in texts (money)
+
+The currency toolkit converts prices in the data, not the text. Messages that still say yen (checked by scanning the 7 files for "yen" / "円"; "Âge moyen" is a false match):
+
+| File | Msg | Text | Note |
+|---|---|---|---|
+| `tmd_contents` | 69 | "Il y avait une pièce de 10 yens ici" | coin reward, amount in text |
+| `tmd_etc` | 123 | "Le coût du déménagement sera de ２１００ yens" | moving cost, amount in text |
+| `tmd_etc` | 169 | "Critères : Collecter au moins 20 000 yen" | goal, amount in text |
+| `tmd_etc` | 302 | "Vous avez collecté [TAG] yen(s) aujourd'hui !" | `[TAG]` shows a game amount (daily income) |
+
+Any change to these numbers or to the word "yen" must follow the currency choice. Not done yet.
+
 ## Beta testers
 
 A tester who still has `etc`, `item` or `room` from before `4426fa0` will get the crash. Make sure they use the current files.

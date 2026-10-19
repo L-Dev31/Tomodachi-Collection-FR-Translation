@@ -12,6 +12,9 @@ MARK = bytes.fromhex('2106c0dedec00621')
 FMT = 0x20364E0
 PLAIN = 0x20363A8
 CAVE = 0x20ECD18
+T1, T1_ROWS, T1_MASK = 0x20F5AD8, 255, 0xFFFFFF
+T2, T2_ROWS, T2_MASK, T2_MAX = 0x20F3BBC, 300, 0x7FFFFF, 990000
+INCOME_CALL, INCOME = 0x2149844, 0x2149E1C
 SITES = {
     'arm9': [(0x20AA998, FMT), (0x20AAA10, FMT), (0x20AB4BC, FMT), (0x20A903C, PLAIN)],
     68: [(0x214BAF4, FMT)],
@@ -437,6 +440,32 @@ def cents_thunk(addr, target, rate):
     return bytes(blob)
 
 
+WHOLE = {'BIF', 'CLP', 'DJF', 'GNF', 'IDR', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'UYI', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'}
+
+
+def cents_ok(code, rate):
+    return code not in WHOLE and rate * 100 * T2_MAX <= T2_MASK
+
+
+def convert_tables(arm9, scale, log):
+    base = 0x02000000
+    capped = 0
+    for addr, rows, mask in ((T1, T1_ROWS, T1_MASK), (T2, T2_ROWS, T2_MASK)):
+        o = addr - base
+        for i in range(rows):
+            w = u32(arm9, o + i * 20)
+            price = w & mask
+            if not price:
+                continue
+            new = convert(price, scale)
+            if new > mask:
+                new = mask
+                capped += 1
+            struct.pack_into('<I', arm9, o + i * 20, (w & ~mask & 0xFFFFFFFF) | new)
+    if capped:
+        log('%d prices capped at the field maximum' % capped)
+
+
 def convert(value, rate):
     return max(1, math.floor(value * rate + 0.5)) if value else 0
 
@@ -785,16 +814,14 @@ def keyboard(rom, arm9, order, log):
 
 def currency(rom, arm9, cfg, log):
     rate, code, sym = cfg['rate'], cfg['code'], cfg['sym']
+    whole = cfg['whole'] or not cents_ok(code, rate)
+    scale = rate if whole else rate * 100
     base = 0x02000000
     thunks = {}
     pos = CAVE
     if any(arm9[CAVE - base:CAVE - base + 128]):
         raise RuntimeError('already patched or unsupported ROM')
-    for target in (FMT, PLAIN):
-        blob = (cents_thunk if target == FMT else thunk)(pos, target, rate)
-        arm9[pos - base:pos - base + len(blob)] = blob
-        thunks[target] = pos
-        pos += len(blob)
+    convert_tables(arm9, scale, log)
 
     def hook(buf, origin, addr, target):
         o = addr - origin
@@ -802,13 +829,19 @@ def currency(rom, arm9, cfg, log):
             raise RuntimeError('unexpected code at %X' % addr)
         buf[o:o + 4] = branch(addr, thunks[target], True)
 
-    for addr, target in SITES['arm9']:
-        hook(arm9, base, addr, target)
+    if not whole:
+        for target in (FMT, PLAIN):
+            blob = (cents_thunk if target == FMT else thunk)(pos, target, 0.01)
+            arm9[pos - base:pos - base + len(blob)] = blob
+            thunks[target] = pos
+            pos += len(blob)
+        for addr, target in SITES['arm9']:
+            hook(arm9, base, addr, target)
     if bytes(arm9[YEN_TEXT - base:YEN_TEXT - base + 2]) != bytes([0x86, 0x51]):
         raise RuntimeError('unexpected yen text')
     arm9[YEN_TEXT - base:YEN_TEXT - base + 2] = bytes([0xE5, 0xFF])
     for oid, sites in SITES.items():
-        if oid == 'arm9':
+        if oid == 'arm9' or whole:
             continue
         log('overlay %d' % oid)
         ent, fid, ram, blob = rom.overlay(oid)
@@ -817,6 +850,19 @@ def currency(rom, arm9, cfg, log):
             hook(blob, ram, addr, target)
         rom.put_file(fid, bytes(blob))
         struct.pack_into('<I', rom.d, ent + 28, 0)
+    wrap, thunk_at = pos, pos + 16
+    stub = thunk_at + len(thunk(thunk_at, 0, scale))
+    code_blob = b''.join([struct.pack('<I', 0xE92D4008), branch(wrap + 4, INCOME, True), struct.pack('<I', 0xE8BD4008),
+                          branch(wrap + 12, thunk_at, False), thunk(thunk_at, stub, scale), struct.pack('<I', 0xE12FFF1E)])
+    arm9[wrap - base:wrap - base + len(code_blob)] = code_blob
+    ent, fid, ram, blob = rom.overlay(82)
+    blob = bytearray(blob)
+    o = INCOME_CALL - ram
+    if bytes(blob[o:o + 4]) != branch(INCOME_CALL, INCOME, True):
+        raise RuntimeError('unexpected code at %X' % INCOME_CALL)
+    blob[o:o + 4] = branch(INCOME_CALL, wrap, True)
+    rom.put_file(fid, bytes(blob))
+    struct.pack_into('<I', rom.d, ent + 28, 0)
     files = rom.files()
     char, cp, letter, bars = SYMBOL[code]
     letter = letter or code[0]
@@ -874,6 +920,7 @@ class App(tk.Tk):
         self.choice = tk.StringVar()
         self.symbol = tk.StringVar()
         self.info = tk.StringVar()
+        self.whole = tk.BooleanVar(value=False)
         self.order = list(KEYBOARDS)
         self.icons = {}
         self.lang = tk.StringVar(value='English')
@@ -1064,7 +1111,8 @@ class App(tk.Tk):
             except ValueError as e:
                 self.sum_meta.set(str(e))
         code = self.code()
-        self.sum_currency.set(f'{code}  {self.symbol.get()}' if code else 'unavailable')
+        mode = 'whole units' if self.whole.get() or not cents_ok(code, self.rates.get(code, 0)) else 'with cents'
+        self.sum_currency.set(f'{code}  {self.symbol.get()}  ·  {mode}' if code else 'unavailable')
         self.sum_keyboard.set('Default order' if self.order == KEYBOARDS else '  \u203a  '.join(self.order))
 
     def style(self):
@@ -1100,6 +1148,8 @@ class App(tk.Tk):
         entry.bind('<FocusOut>', lambda e: self.symbol.get() or self.reset())
         ttk.Button(box, text='Reset', style='Soft.TButton', command=self.reset).grid(row=1, column=2, sticky='w', pady=(10, 0))
         ttk.Label(box, textvariable=self.info, foreground=DARK).grid(row=2, column=0, columnspan=3, sticky='w', pady=(10, 0))
+        self.round_cb = ttk.Checkbutton(box, text='Round prices to whole units', variable=self.whole, command=self.refresh_summary)
+        self.round_cb.grid(row=3, column=0, columnspan=3, sticky='w', pady=(10, 0))
         return page
 
     def keyboard_tab(self, parent):
@@ -1156,7 +1206,22 @@ class App(tk.Tk):
         self.symbol.set(SYMBOL[code][0])
         rate = self.rates.get(code)
         self.info.set(f'1 {code} = {1 / rate:,.2f} JPY' if rate else '')
+        self.sync_round()
+        if rate:
+            scale = rate if self.whole.get() else rate * 100
+            if T2_MAX * scale > T2_MASK:
+                self.info.set(self.info.get() + f'  ·  prices above {T2_MASK / scale:,.0f} JPY are capped')
         self.refresh_summary()
+
+    def sync_round(self):
+        code = self.code()
+        rate = self.rates.get(code)
+        free = bool(rate) and cents_ok(code, rate)
+        if not free:
+            self.whole.set(True)
+        elif self.round_cb.instate(['disabled']):
+            self.whole.set(False)
+        self.round_cb.state(['!disabled'] if free else ['disabled'])
 
     def reset(self):
         self.symbol.set(SYMBOL[self.code()][0])
@@ -1190,7 +1255,7 @@ class App(tk.Tk):
         if not code:
             messagebox.showerror('Rates', 'No exchange rates: check the network.')
             return
-        cfg = {'currency': {'rate': self.rates[code], 'code': code, 'sym': sym}}
+        cfg = {'currency': {'rate': self.rates[code], 'code': code, 'sym': sym, 'whole': self.whole.get()}}
         if self.order != KEYBOARDS:
             cfg['keyboard'] = list(self.order)
         try:
