@@ -1,0 +1,511 @@
+import json
+import math
+import struct
+import tkinter as tk
+import urllib.request
+from tkinter import filedialog, messagebox, ttk
+
+RATE_URL = 'https://open.er-api.com/v6/latest/JPY'
+MARK = bytes.fromhex('2106c0dedec00621')
+FMT = 0x20364E0
+PLAIN = 0x20363A8
+CAVE = 0x20ECD18
+SITES = {
+    'arm9': [(0x20AA998, FMT), (0x20AAA10, FMT), (0x20AB4BC, FMT), (0x20A903C, PLAIN)],
+    68: [(0x214BAF4, FMT)],
+    72: [(0x214F240, FMT)],
+    75: [(0x2161408, FMT)],
+    83: [(0x214B6EC, FMT)],
+    84: [(0x214AD48, FMT), (0x214AEF4, PLAIN)],
+    85: [(0x214BB24, FMT)],
+    100: [(0x2149EBC, PLAIN)],
+}
+YEN = ['#######', '#..#..#', '#..#..#', '#######', '#.....#', '#.....#', '#....##']
+EURO = ['..###..', '.#...#.', '####...', '.#.....', '####...', '.#...#.', '..###..']
+LIST_YEN = [(2, 32, 38, 97), (2, 32, 226, 59), (2, 32, 176, 87), (2, 32, 193, 132)]
+GLYPHS = {
+    '/Scn/List/List_AlbumList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_ChangeRoomList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_MiiList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_NewsList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_RightJobList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_ShopList_LZ.bin': LIST_YEN + [(3, 1, 1, 3521), (3, 8, 12, 501)],
+    '/Scn/List/List_TouchList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_TushinItemList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_TushinList_LZ.bin': LIST_YEN,
+    '/Scn/List/List_WriteSongList_LZ.bin': LIST_YEN,
+    '/Scn/Scene/SceneMap2_LZ.bin': [(4, 8, 12, 333)],
+    '/Scn/Scene/SceneMiiTouch_LZ.bin': [(7, 8, 44, 317)],
+    '/Scn/Scene/SceneShop_LZ.bin': [(5, 32, 206, 65), (5, 32, 206, 169), (5, 32, 201, 4), (5, 32, 242, 11),
+                                    (5, 32, 201, 108), (5, 32, 242, 115), (8, 1, 1, 65), (8, 1, 1, 1)],
+    '/Scn/Scene/SceneTestNg136_LZ.bin': [(1, 32, 176, 87)],
+    '/Scn/Scene/SceneWriteSong_LZ.bin': [(3, 32, 38, 97), (3, 32, 178, 83), (3, 32, 177, 124)],
+}
+FONTS = ['/Cmn/Font/FontLD08x_LZ.bin', '/Cmn/Font/FontLD10x_LZ.bin', '/Cmn/Font/FontLD12x_LZ.bin']
+YEN_TEXT = 0x2114FD0
+
+
+def u16(b, o):
+    return struct.unpack_from('<H', b, o)[0]
+
+
+def u32(b, o):
+    return struct.unpack_from('<I', b, o)[0]
+
+
+def lz10(b):
+    size = b[1] | (b[2] << 8) | (b[3] << 16)
+    out = bytearray(size)
+    ip, op = 4, 0
+    while op < size:
+        flags = b[ip]
+        ip += 1
+        for i in range(7, -1, -1):
+            if op >= size:
+                break
+            if flags & (1 << i):
+                b1, b2 = b[ip], b[ip + 1]
+                ip += 2
+                disp = (((b1 & 15) << 8) | b2) + 1
+                for _ in range(min((b1 >> 4) + 3, size - op)):
+                    out[op] = out[op - disp]
+                    op += 1
+            else:
+                out[op] = b[ip]
+                op += 1
+                ip += 1
+    return bytes(out)
+
+
+def lz10c(data):
+    n = len(data)
+    out = bytearray([0x10, n & 255, (n >> 8) & 255, (n >> 16) & 255])
+    heads, chain = {}, [0] * n
+
+    def add(i):
+        if i + 2 < n:
+            k = data[i] | (data[i + 1] << 8) | (data[i + 2] << 16)
+            chain[i] = heads.get(k, -1)
+            heads[k] = i
+
+    i = 0
+    while i < n:
+        flags, block = 0, bytearray()
+        for bit in range(8):
+            if i >= n:
+                break
+            best, dist = 0, 0
+            if i + 2 < n:
+                j = heads.get(data[i] | (data[i + 1] << 8) | (data[i + 2] << 16), -1)
+                tries = 0
+                while j >= 0 and tries < 64 and i - j <= 4096:
+                    if i - j >= 2:
+                        m = 0
+                        while m < min(18, n - i) and data[j + m] == data[i + m]:
+                            m += 1
+                        if m > best:
+                            best, dist = m, i - j
+                    j = chain[j]
+                    tries += 1
+            if best >= 3:
+                flags |= 0x80 >> bit
+                block += bytes([((best - 3) << 4) | ((dist - 1) >> 8), (dist - 1) & 255])
+                for t in range(best):
+                    add(i + t)
+                i += best
+            else:
+                block.append(data[i])
+                add(i)
+                i += 1
+        out.append(flags)
+        out += block
+    return bytes(out) + b'\0' * (-len(out) % 4)
+
+
+def blz(f):
+    n = len(f)
+    inc = u32(f, n - 4)
+    if not inc:
+        return bytes(f[:n - 4])
+    enc = u32(f, n - 8) & 0xFFFFFF
+    dec = n - enc
+    raw = bytearray(dec + enc + inc)
+    raw[0:dec] = f[0:dec]
+    e = bytes(f[dec:dec + enc - f[n - 5]])[::-1]
+    p, o, fl, m = 0, dec, 0, 0
+    while o < len(raw):
+        m >>= 1
+        if not m:
+            if p >= len(e):
+                break
+            fl = e[p]
+            p += 1
+            m = 0x80
+        if not fl & m:
+            if p >= len(e):
+                break
+            raw[o] = e[p]
+            o += 1
+            p += 1
+        else:
+            if p + 1 >= len(e):
+                break
+            pos = (e[p] << 8) | e[p + 1]
+            p += 2
+            dist = (pos & 0xFFF) + 3
+            for _ in range(min((pos >> 12) + 3, len(raw) - o)):
+                raw[o] = raw[o - dist]
+                o += 1
+    raw[dec:] = raw[dec:][::-1]
+    return bytes(raw)
+
+
+def crc16(b, s, e):
+    crc = 0xFFFF
+    for i in range(s, e):
+        crc ^= b[i]
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc
+
+
+def arm_imm(v):
+    for rot in range(0, 32, 2):
+        r = ((v << rot) | (v >> (32 - rot))) & 0xFFFFFFFF if rot else v
+        if r < 256:
+            return (rot // 2 << 8) | r
+    raise ValueError(v)
+
+
+def branch(src, dst, link):
+    return struct.pack('<I', (0xEB000000 if link else 0xEA000000) | (((dst - src - 8) >> 2) & 0xFFFFFF))
+
+
+def thunk(addr, target, rate):
+    shift = 32
+    while round(rate * 2 ** shift) >= 2 ** 32:
+        shift -= 1
+    code = [0xE92D100E, 0xE1A0C000, 0, 0xE0832190, 0xE2922000 | arm_imm(1 << (shift - 1)), 0xE2A33000]
+    code += [0xE1A00003] if shift == 32 else [0xE1A00022 + (shift << 7), 0xE1800003 | ((32 - shift) << 7)]
+    code += [0xE3500000, 0x1A000001, 0xE35C0000, 0x13A00001, 0xE8BD100E]
+    code[2] = 0xE59F1000 | (4 * len(code) + 4 - 16)
+    body = b''.join(struct.pack('<I', w) for w in code)
+    body += branch(addr + len(body), target, False)
+    return body + struct.pack('<I', round(rate * 2 ** shift))
+
+
+def convert(value, rate):
+    return max(1, math.floor(value * rate + 0.5)) if value else 0
+
+
+class Rom:
+    def __init__(self, data):
+        self.d = bytearray(data)
+        self.tail = 0
+
+    def fat(self, fid):
+        o = u32(self.d, 0x48) + fid * 8
+        return u32(self.d, o), u32(self.d, o + 4)
+
+    def set_fat(self, fid, s, e):
+        o = u32(self.d, 0x48) + fid * 8
+        struct.pack_into('<II', self.d, o, s, e)
+
+    def files(self):
+        fnt, out = u32(self.d, 0x40), {}
+
+        def walk(dir_id, prefix):
+            entry = fnt + (dir_id & 0xFFF) * 8
+            p, fid = fnt + u32(self.d, entry), u16(self.d, entry + 4)
+            while self.d[p]:
+                b = self.d[p]
+                name = self.d[p + 1:p + 1 + (b & 127)].decode('latin1')
+                p += 1 + (b & 127)
+                if b & 128:
+                    walk(u16(self.d, p), prefix + name + '/')
+                    p += 2
+                else:
+                    out[prefix + name] = fid
+                    fid += 1
+
+        walk(0xF000, '/')
+        return out
+
+    def append(self, blob):
+        if not self.tail:
+            ends = [self.fat(i)[1] for i in range(u32(self.d, 0x4C) // 8)]
+            self.tail = (max(ends + [u32(self.d, 0x50) + u32(self.d, 0x54), u32(self.d, 0x80)]) + 0x1FF) & ~0x1FF
+        off = self.tail
+        if off + len(blob) > len(self.d):
+            self.d.extend(b'\xff' * (off + len(blob) - len(self.d)))
+        self.d[off:off + len(blob)] = blob
+        self.tail = (off + len(blob) + 0x1FF) & ~0x1FF
+        return off
+
+    def put_file(self, fid, blob):
+        off = self.append(blob)
+        self.set_fat(fid, off, off + len(blob))
+
+    def arm9(self):
+        off, size = u32(self.d, 0x20), u32(self.d, 0x2C)
+        f = bytes(self.d[off:off + size])
+        i = f.find(MARK)
+        if i < 0:
+            raise RuntimeError('ARM9 module not recognised')
+        return blz(f) if u32(f, i - 8) else f
+
+    def set_arm9(self, raw):
+        off = 0x4000
+        end = off + len(raw) + 12
+        old = u32(self.d, 0x20) + u32(self.d, 0x2C)
+        footer = bytes(self.d[old:old + 12])
+        for o in (0x30, 0x68):
+            if 0 < u32(self.d, o) < end:
+                raise RuntimeError('ARM7 or banner in the way')
+        t, n = u32(self.d, 0x50), u32(self.d, 0x54)
+        if t < end:
+            blob = bytes(self.d[t:t + n])
+            self.d[t:t + n] = b'\xff' * n
+            struct.pack_into('<I', self.d, 0x50, self.append(blob))
+        for fid in range(u32(self.d, 0x4C) // 8):
+            s, e = self.fat(fid)
+            if s < end and e > off and e > s:
+                blob = bytes(self.d[s:e])
+                self.d[s:e] = b'\xff' * (e - s)
+                self.put_file(fid, blob)
+        raw = bytearray(raw)
+        struct.pack_into('<I', raw, raw.find(MARK) - 8, 0)
+        self.d[off:off + len(raw)] = raw
+        self.d[off + len(raw):end] = footer
+        struct.pack_into('<I', self.d, 0x20, off)
+        struct.pack_into('<I', self.d, 0x2C, len(raw))
+
+    def overlay(self, oid):
+        t = u32(self.d, 0x50)
+        for ent in range(t, t + u32(self.d, 0x54), 32):
+            if u32(self.d, ent) == oid:
+                fid, comp = u32(self.d, ent + 24), u32(self.d, ent + 28)
+                s, e = self.fat(fid)
+                data = bytes(self.d[s:e])
+                return ent, fid, u32(self.d, ent + 4), (blz(data) if comp & 0x1000000 else data)
+        raise RuntimeError('overlay %d missing' % oid)
+
+    def save(self):
+        if self.tail:
+            struct.pack_into('<I', self.d, 0x80, self.tail)
+            cap = 0
+            while (128 << 10) << cap < len(self.d):
+                cap += 1
+            self.d[0x14] = max(self.d[0x14], cap)
+        struct.pack_into('<H', self.d, 0x15E, crc16(self.d, 0, 0x15E))
+        return bytes(self.d)
+
+
+def rgcn(d, a):
+    p = a + 0x10
+    while d[p:p + 4] != b'RAHC':
+        p += u32(d, p + 4)
+    return p + 8 + u32(d, p + 28)
+
+
+def narc(d):
+    p = u16(d, 12)
+    tbl = {}
+    while p < len(d):
+        tbl[bytes(d[p:p + 4])] = p
+        p += u32(d, p + 4)
+    fat, gm = tbl[b'BTAF'], tbl[b'GMIF']
+    return [(u32(d, fat + 12 + i * 8) + gm + 8) for i in range(u16(d, fat + 8))]
+
+
+def euro_glyphs(d, hits):
+    d = bytearray(d)
+    starts = narc(d)
+    for sub, w, x, y in hits:
+        base = rgcn(d, starts[sub])
+
+        def at(px, py):
+            o = base + ((py // 8) * w + px // 8) * 32 + ((py % 8) * 8 + px % 8) // 2
+            return o, (px % 2) * 4
+
+        def get(px, py):
+            o, sh = at(px, py)
+            return (d[o] >> sh) & 15
+
+        ink = get(x, y)
+        cells = [(i, j) for j in range(7) for i in range(7)]
+        if any((YEN[j][i] == '#') != (get(x + i, y + j) == ink) for i, j in cells):
+            raise RuntimeError('unexpected graphics')
+        rest = [get(x + i, y + j) for i, j in cells if YEN[j][i] != '#']
+        bg = max(set(rest), key=rest.count)
+        for i, j in cells:
+            o, sh = at(x + i, y + j)
+            v = ink if EURO[j][i] == '#' else bg
+            d[o] = (d[o] & (0xF0 >> sh)) | (v << sh)
+    return bytes(d)
+
+
+def font_blocks(d):
+    base = d.find(b'RTFN')
+    p = base + u16(d, base + 12)
+    out = {}
+    for _ in range(u16(d, base + 14)):
+        out.setdefault(bytes(d[p:p + 4]), []).append(p)
+        p += u32(d, p + 4)
+    return out
+
+
+def glyph_index(d, maps, code):
+    for p in maps:
+        first, last, kind, d0 = u16(d, p + 8), u16(d, p + 10), u16(d, p + 12), p + 20
+        if not first <= code <= last:
+            continue
+        if kind == 0:
+            return u16(d, d0) + code - first
+        if kind == 1:
+            g = u16(d, d0 + (code - first) * 2)
+            return None if g == 0xFFFF else g
+        for i in range(u16(d, d0)):
+            if u16(d, d0 + 2 + i * 4) == code:
+                return u16(d, d0 + 4 + i * 4)
+    return None
+
+
+def euro_font(d):
+    d = bytearray(d)
+    blocks = font_blocks(d)
+    plgc, hdwc = blocks[b'PLGC'][0], blocks[b'HDWC'][0]
+    csz = u16(d, plgc + 10)
+    yen = glyph_index(d, blocks[b'PAMC'], 0xFFE5)
+    euro = glyph_index(d, blocks[b'PAMC'], 0x20AC)
+    if yen is None:
+        raise RuntimeError('unexpected font')
+    if euro is None:
+        bits = ''.join('1' if c == '#' else '0' for row in EURO for c in row).ljust(csz * 8, '0')
+        bitmap, metrics = bytes(int(bits[i:i + 8], 2) for i in range(0, csz * 8, 8)), bytes([0, 6, 7])
+    else:
+        o = plgc + 16 + euro * csz
+        bitmap = bytes(d[o:o + csz])
+        o = hdwc + 16 + (euro - u16(d, hdwc + 8)) * 3
+        metrics = bytes(d[o:o + 3])
+    o = plgc + 16 + yen * csz
+    d[o:o + csz] = bitmap
+    o = hdwc + 16 + (yen - u16(d, hdwc + 8)) * 3
+    d[o:o + 3] = metrics
+    return bytes(d)
+
+
+def patch(data, rate, log=print):
+    rom = Rom(data)
+    arm9 = bytearray(rom.arm9())
+    base = 0x02000000
+    thunks = {}
+    pos = CAVE
+    if any(arm9[CAVE - base:CAVE - base + 128]):
+        raise RuntimeError('already patched or unsupported ROM')
+    for target in (FMT, PLAIN):
+        code = thunk(pos, target, rate)
+        arm9[pos - base:pos - base + len(code)] = code
+        thunks[target] = pos
+        pos += len(code)
+
+    def hook(buf, origin, addr, target):
+        o = addr - origin
+        if bytes(buf[o:o + 4]) != branch(addr, target, True):
+            raise RuntimeError('unexpected code at %X' % addr)
+        buf[o:o + 4] = branch(addr, thunks[target], True)
+
+    for addr, target in SITES['arm9']:
+        hook(arm9, base, addr, target)
+    if bytes(arm9[YEN_TEXT - base:YEN_TEXT - base + 2]) != bytes([0x86, 0x51]):
+        raise RuntimeError('unexpected yen text')
+    arm9[YEN_TEXT - base:YEN_TEXT - base + 2] = bytes([0xE5, 0xFF])
+    rom.set_arm9(bytes(arm9))
+    for oid, sites in SITES.items():
+        if oid == 'arm9':
+            continue
+        log('overlay %d' % oid)
+        ent, fid, ram, blob = rom.overlay(oid)
+        blob = bytearray(blob)
+        for addr, target in sites:
+            hook(blob, ram, addr, target)
+        rom.put_file(fid, bytes(blob))
+        struct.pack_into('<I', rom.d, ent + 28, 0)
+    files = rom.files()
+    for path in FONTS:
+        log(path)
+        fid = files[path]
+        s, e = rom.fat(fid)
+        rom.put_file(fid, lz10c(euro_font(lz10(bytes(rom.d[s:e])))))
+    for path, hits in GLYPHS.items():
+        log(path)
+        fid = files[path]
+        s, e = rom.fat(fid)
+        rom.put_file(fid, lz10c(euro_glyphs(lz10(bytes(rom.d[s:e])), hits)))
+    return rom.save()
+
+
+def fetch_rates():
+    with urllib.request.urlopen(RATE_URL, timeout=10) as r:
+        return json.load(r)['rates']
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title('Tomodachi currency')
+        self.path = tk.StringVar()
+        self.code = tk.StringVar(value='EUR')
+        self.info = tk.StringVar()
+        try:
+            self.rates = fetch_rates()
+        except Exception as e:
+            self.rates = {}
+            messagebox.showerror('Rates', f'Rate API unavailable:\n{e}')
+        frame = tk.Frame(self, padx=10, pady=10)
+        frame.pack()
+        tk.Button(frame, text='Open ROM', command=self.open_rom).grid(row=0, column=0, sticky='w')
+        tk.Label(frame, textvariable=self.path, width=48, anchor='w').grid(row=0, column=1, columnspan=2)
+        tk.Label(frame, text='Currency').grid(row=1, column=0, sticky='w', pady=8)
+        combo = ttk.Combobox(frame, textvariable=self.code, values=sorted(self.rates), state='readonly', width=8)
+        combo.grid(row=1, column=1, sticky='w')
+        combo.bind('<<ComboboxSelected>>', lambda e: self.show())
+        tk.Label(frame, textvariable=self.info).grid(row=1, column=2, sticky='w')
+        tk.Button(frame, text='Patch ROM', command=self.run).grid(row=2, column=0, sticky='w')
+        self.status = tk.Label(frame, text='', anchor='w')
+        self.status.grid(row=2, column=1, columnspan=2, sticky='w')
+        self.show()
+
+    def show(self):
+        rate = self.rates.get(self.code.get())
+        self.info.set(f'1 {self.code.get()} = {1 / rate:,.2f} JPY' if rate else '')
+
+    def open_rom(self):
+        path = filedialog.askopenfilename(filetypes=[('Nintendo DS ROM', '*.nds')])
+        if path:
+            self.path.set(path)
+
+    def log(self, text):
+        self.status.config(text=text)
+        self.update()
+
+    def run(self):
+        code = self.code.get()
+        if not self.path.get() or code not in self.rates:
+            return
+        out = filedialog.asksaveasfilename(defaultextension='.nds', initialfile=f'tomodachi_{code}.nds')
+        if not out:
+            return
+        try:
+            with open(self.path.get(), 'rb') as f:
+                result = patch(f.read(), self.rates[code], self.log)
+            with open(out, 'wb') as f:
+                f.write(result)
+            self.log('Done')
+        except Exception as e:
+            self.log('')
+            messagebox.showerror('Patch failed', str(e))
+
+
+if __name__ == '__main__':
+    App().mainloop()
