@@ -1,0 +1,14 @@
+
+tools/toolkit/RESEARCH.md
+/tools/toolkit/tomodachi_toolkit/__pycache__
+/tools/toolkit/tomodachi_toolkit/core/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/currency/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/images/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/models/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/speech/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/speech/armvm/__pycache__
+/tools/toolkit/tomodachi_toolkit/ui/__pycache__
+/tools/toolkit/tomodachi_toolkit/ui/tabs/__pycache__
+/tools/toolkit/tomodachi_toolkit/ui/tabs/voice/__pycache__
+tools/bmgrom.py
+/tools/toolkit/tests
