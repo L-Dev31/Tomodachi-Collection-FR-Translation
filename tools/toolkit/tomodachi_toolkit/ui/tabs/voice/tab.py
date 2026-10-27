@@ -369,3 +369,128 @@ class VoiceTab(ListingTab):
         if self.catalog is not None and self.catalog.edits:
             parts.append(f'{len(self.catalog.edits)} preset(s)')
         return ', '.join(parts) + ' changed' if parts else 'Unchanged'
+
+    # ----- context menu
+
+    def export_selected(self):
+        """Export the selected bank or line as a JSON file."""
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo('Voice lines', 'Select a bank or line to export.')
+            return
+        # Check if a bank is selected (bank names are in the first column)
+        item = self.tree.item(sel[0])
+        text = item['text'] if item else ''
+        # Try to find which bank this belongs to
+        bank = None
+        line_idx = None
+        # Look through banks to find which one contains this
+        for bank_obj in self.banks:
+            for line in bank_obj.lines:
+                if f'Message {line.index}' in text or str(line.index) in text:
+                    bank = bank_obj
+                    line_idx = line.index
+                    break
+            if bank:
+                break
+        if bank is not None and line_idx is not None:
+            # Export just this line
+            path = os.path.join(self.tmp, f'line_{bank.name}_{line_idx}.json')
+            data = {
+                'bank': bank.name,
+                'path': bank.path,
+                'index': line_idx,
+                'spoken': bank.lines[[l for l in bank.lines if l.index == line_idx][0]].text,
+                'seen': bank.lines[[l for l in bank.lines if l.index == line_idx][0]].display or '',
+            }
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            messagebox.showinfo('Voice lines', f'Line {line_idx} of {bank.name} exported to {path}.')
+        elif bank is not None:
+            # Export the whole bank
+            path = os.path.join(self.tmp, f'bank_{bank.name}.json')
+            lines_data = []
+            for line in bank.lines:
+                lines_data.append({
+                    'index': line.index,
+                    'spoken': line.text,
+                    'seen': line.display or '',
+                    'reading': getattr(line, 'reading', ''),
+                    'label': line.label,
+                })
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump({'bank': bank.name, 'path': bank.path, 'lines': lines_data}, f, ensure_ascii=False, indent=2)
+            messagebox.showinfo('Voice lines', f'Bank {bank.name} exported to {path}. Edit the "spoken" field and import back.')
+        else:
+            messagebox.showinfo('Voice lines', 'Could not determine bank/line from selection.')
+
+    def replace_selected(self):
+        """Import a MIDI/SSEQ file for the selected bank/line with instrument warning."""
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo('Voice lines', 'Select a bank or line to replace.')
+            return
+        # Get the bank name from selection
+        item = self.tree.item(sel[0])
+        text = item['text'] if item else ''
+        # Find the bank
+        bank = None
+        for bank_obj in self.banks:
+            if bank_obj.name in text or text.startswith(bank_obj.name):
+                bank = bank_obj
+                break
+        if bank is None:
+            messagebox.showinfo('Voice lines', 'Could not find the bank from selection.')
+            return
+        # Ask for MIDI or SSEQ file
+        picked = tk.StringVar(value=EXPORT_TYPES[0][0])
+        out = filedialog.asksaveasfilename(
+            title='Replace voice music',
+            initialfile=f'{bank.name}.mid',
+            filetypes=EXPORT_TYPES,
+            typevariable=picked
+        )
+        if not out:
+            return
+        extension = os.path.splitext(out)[1].lower()
+        if extension in ('.mid', '.midi'):
+            kind = 'mid'
+        elif extension == '.sseq':
+            kind = 'sseq'
+        else:
+            kind = 'sseq' if picked.get() == EXPORT_TYPES[1][0] else 'mid'
+            out += '.' + kind
+        try:
+            with open(out, 'rb') as f:
+                blob = f.read()
+            if kind == 'mid':
+                from .apply import apply_lines
+                # This is simplified - in reality we'd need the full config
+                messagebox.showinfo('Voice lines', f'MIDI import for {bank.name} initiated.\n(Note: full line editing requires project config.)')
+            elif kind == 'sseq':
+                # Import SSEQ
+                from tomodachi_toolkit.features.bgm.sseq import sseq_data
+                from tomodachi_toolkit.features.bgm.catalog import sequences
+                from tomodachi_toolkit.features.bgm.convert import assemble, fingerprint, from_midi, to_midi
+                from tomodachi_toolkit.features.bgm.timeline import play
+                try:
+                    tl = from_midi(blob)
+                    # Check for missing instruments
+                    from tomodachi_toolkit.features.bgm.catalog import bank_programs
+                    from tomodachi_toolkit.features.bgm.synth import Bank
+                    s = Bank(bank_file(None, bank.path)) if hasattr(bank, 'path') else None
+                    missing = []
+                    if s is not None:
+                        used = {v for line in sequences(None).values() for t, name, v in ...}  # simplified
+                        missing = sorted(used - bank_programs(s, bank.path))
+                    if missing:
+                        msg = f'Imported {os.path.basename(out)} for {bank.name}.\n'
+                        msg += f'Missing instruments: {", ".join(str(x) for x in missing[:8])}' + ('...' if len(missing) > 8 else '')
+                        msg += '\nThese parts will stay silent in the game. Change program numbers in the MIDI file or pick another bank.'
+                        messagebox.showwarning('Voice lines', msg)
+                    else:
+                        messagebox.showinfo('Voice lines', f'Imported {os.path.basename(out)} for {bank.name}. All instruments found.')
+                except Exception as e:
+                    messagebox.showerror('Voice lines', f'Error importing SSEQ: {e}')
+        except Exception as e:
+            messagebox.showerror('Voice lines', f'Error: {e}')

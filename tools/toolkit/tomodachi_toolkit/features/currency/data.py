@@ -1,4 +1,5 @@
-"""Currency symbols and names (pure data)."""
+"""Currency symbols and names, and how the fonts of the game draw a symbol."""
+import unicodedata
 
 
 SYMBOL = {}
@@ -52,6 +53,31 @@ for codes, spec in (
 ):
     for code in codes.split():
         SYMBOL[code] = spec
+
+
+# every symbol of the table: (code point of its glyph or None, letter it is drawn from, bars across the letter)
+KNOWN = {}
+for _char, _cp, _letter, _bars in SYMBOL.values():
+    KNOWN.setdefault(_char, (_cp, _letter, _bars))
+
+
+def base_letter(ch):
+    """The plain letter an accented letter is made from (é gives e), or None."""
+    base = unicodedata.normalize('NFD', ch)[:1]
+    return base if base != ch and base.isascii() and base.isalpha() else None
+
+
+def symbol_spec(code, sym):
+    """(code point, letter, bars): how the fonts draw `sym` as the symbol of the money `code`. A font that has the character draws it;
+    the small one lacks many (accented letters, the euro sign) and draws a letter with bars across it instead: the one of the symbol
+    when the table knows it (a W with two bars for the won), else the plain letter of an accented one, else the first letter of the
+    code of the money."""
+    if len(sym) != 1:
+        raise ValueError('The symbol must be one character.')
+    char, cp, letter, bars = SYMBOL[code]
+    if sym != char:
+        cp, letter, bars = KNOWN.get(sym) or (ord(sym), base_letter(sym) or letter, 0)
+    return cp, letter or code[0], bars
 
 
 NAMES = dict(line.split(' ', 1) for line in '''

@@ -67,30 +67,39 @@ class ListingTab(Tab):
             self._menu.grab_release()
 
     def _ctx_export(self):
-        fn = getattr(self, 'export', None)
+        """Export the selected item(s): for Voice, bank or line; for others, the selected row."""
+        # Try tab-specific first
+        fn = getattr(self, 'export_selected', None)
         if callable(fn):
             fn()
+            return
+        # Fallback to generic
+        fm = getattr(self, 'export_model', None)
+        if callable(fm):
+            fm()
             return
         fe = getattr(self, 'export_lines', None)
         if callable(fe):
             fe()
             return
-        fm = getattr(self, 'export_model', None)
-        if callable(fm):
-            fm()
-            return
 
     def _ctx_replace(self):
+        """Replace the selected item with a file import."""
+        fn = getattr(self, 'replace_selected', None)
+        if callable(fn):
+            fn()
+            return
         fr = getattr(self, 'replace', None)
         if callable(fr):
             fr()
             return
-        fm = getattr(self, 'import_model', None)
-        if callable(fm):
-            fm()
-            return
 
     def _ctx_revert(self):
+        """Revert the selected item(s) to the ROM original."""
+        fr = getattr(self, 'revert_selected', None)
+        if callable(fr):
+            fr()
+            return
         fr = getattr(self, 'revert', None)
         if callable(fr):
             fr()
