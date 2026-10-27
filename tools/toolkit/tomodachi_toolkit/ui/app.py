@@ -10,7 +10,19 @@ from .player import AudioPlayer
 from .session import Session
 from .pages import Pages
 from .tabs import GROUPS
-from .theme import BG, DARK, apply_theme, font
+from .theme import BG, DARK, MUTED, apply_theme, font
+
+# Credits for APIs, formats and libraries used in this toolkit
+CREDITS = [
+    ('Toolkit', 'L-DEV31 / TomoDS Team'),
+    ('ROM format', 'Nitro System (NDS)'),
+    ('Audio', 'IMA ADPCM / SWAR (SAD)'),
+    ('Fonts', 'NFTR (Nitro Font Reverse Engineered)'),
+    ('Math', 'Python stdlib (math, struct)'),
+    ('UI', 'Tkinter (stdlib)'),
+    ('JSON', 'Python stdlib'),
+    ('Project', 'Tomodachi Collection FR Translation'),
+]
 
 
 class App(tk.Tk):
@@ -31,7 +43,10 @@ class App(tk.Tk):
         self.rom_tab.add_summary(self.tabs)
         footer = tk.Frame(self, bg=BG, pady=10)
         footer.pack(fill='x')
-        tk.Label(footer, text='2026 by L-DEV31 - TomoDS Team', bg=BG, fg=DARK, font=font(9)).pack()
+        tk.Label(footer, text='2026 by L-DEV31 - TomoDS Team', bg=BG, fg=DARK, font=font(9)).pack(side='left')
+        # Credits line
+        credits_text = ' | '.join(f'{name}' for name, _ in CREDITS)
+        tk.Label(footer, text=credits_text, bg=BG, fg=MUTED, font=font(7)).pack(side='left', padx=(20, 0))
         self.bind_all('<Control-f>', self.find)
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.ready = True

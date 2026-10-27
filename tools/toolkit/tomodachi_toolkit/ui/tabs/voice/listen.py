@@ -74,7 +74,6 @@ class ListenBar(ttk.Labelframe):
         busy = on and tab.synth.busy
         line = tab.editor.active
         self.voice_box.configure(state='readonly' if on else 'disabled')
-        self.edit_button.state(['!disabled'] if on else ['disabled'])
         self.play_button.state(['!disabled'] if on and line and not busy else ['disabled'])
         self.stop_button.state(['!disabled'] if on else ['disabled'])
 
