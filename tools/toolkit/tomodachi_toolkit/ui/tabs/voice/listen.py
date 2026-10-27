@@ -13,27 +13,20 @@ class ListenBar(ttk.Labelframe):
     """Plays the line as it is now ("Play") or as it is in the ROM ("Original") with the voice chosen here."""
 
     def __init__(self, master, tab):
-        super().__init__(master, text='Listen   (a test: nothing here is written to the ROM)', padding=(8, 4, 8, 6))
+        super().__init__(master, text='Listen', padding=(8, 4, 8, 6))
         self.tab = tab
         self.catalog, self.voice_i, self.job, self.pcm = None, 0, None, None
         self.status = tk.StringVar()
         top = ttk.Frame(self)
         top.pack(fill='x')
         ttk.Label(top, text='Voice').pack(side='left')
-        self.voice_box = ttk.Combobox(top, state='readonly', width=20)
-        self.voice_box.pack(side='left', padx=(6, 8))
+        self.voice_box = ttk.Combobox(top, state='readonly', width=15)
+        self.voice_box.pack(side='left', padx=(2, 4))
         self.voice_box.bind('<<ComboboxSelected>>', self.voice_chosen)
-        self.edit_button = ttk.Button(top, text='Voice settings', style='Mini.TButton', command=self.edit_voice)
-        self.edit_button.pack(side='left')
-        row = ttk.Frame(self)
-        row.pack(fill='x', pady=(6, 0))
-        self.play_button = ttk.Button(row, text='Play', style='MiniAccent.TButton', command=self.speak)
-        self.original_button = ttk.Button(row, text='Original', style='Mini.TButton', command=lambda: self.speak(original=True))
-        self.stop_button = ttk.Button(row, text='Stop', style='Mini.TButton', command=self.stop)
-        self.save_button = ttk.Button(row, text='Save WAV', style='Mini.TButton', command=self.save)
-        for b in (self.play_button, self.original_button, self.stop_button, self.save_button):
-            b.pack(side='left', padx=(0, 6))
-        ttk.Label(row, textvariable=self.status, foreground=DARK, wraplength=260, justify='left').pack(side='left', padx=(6, 0))
+        self.play_button = ttk.Button(top, text='▶', style='Accent.TButton', command=self.speak)
+        self.play_button.pack(side='left', padx=(4, 0))
+        self.stop_button = ttk.Button(top, text='■', style='Accent.TButton', command=self.stop)
+        self.stop_button.pack(side='left', padx=(2, 0))
         self.set_state()
 
     # ----- the voice
@@ -83,9 +76,7 @@ class ListenBar(ttk.Labelframe):
         self.voice_box.configure(state='readonly' if on else 'disabled')
         self.edit_button.state(['!disabled'] if on else ['disabled'])
         self.play_button.state(['!disabled'] if on and line and not busy else ['disabled'])
-        self.original_button.state(['!disabled'] if on and line and tab.editor.model.edited and not busy else ['disabled'])
         self.stop_button.state(['!disabled'] if on else ['disabled'])
-        self.save_button.state(['!disabled'] if self.pcm and not busy else ['disabled'])
 
     # ----- sound
 
