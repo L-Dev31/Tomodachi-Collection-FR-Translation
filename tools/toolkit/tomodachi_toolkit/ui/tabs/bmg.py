@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 from ...core.bmg import bmg_problems
 from ...features.bmg import bmg_list
 from ..theme import BROWN, DARK, ERROR, MUTED, PANEL, font
+from ..widgets import batch_buttons
 from .base import Tab
 
 
@@ -18,8 +19,8 @@ class BmgTab(Tab):
         self.files, self.new = {}, {}
         bar = ttk.Frame(self)
         bar.pack(fill='x')
-        ttk.Button(bar, text='Replace from folder', style='Soft.TButton', command=self.from_folder).pack(side='left')
-        ttk.Button(bar, text='Cancel all', style='Soft.TButton', command=self.clear).pack(side='left', padx=(8, 0))
+        self.batch = batch_buttons(bar, self.export_all, self.from_folder, self.clear)
+        self.batch.pack(side='right')
         box = ttk.Labelframe(self, text='Game BMG files', padding=8)
         box.pack(fill='both', expand=True, pady=(10, 0))
         canvas = tk.Canvas(box, bg=PANEL, height=300, width=470, highlightthickness=0)
@@ -81,7 +82,10 @@ class BmgTab(Tab):
         self.draw()
 
     def from_folder(self):
-        folder = filedialog.askdirectory()
+        self.import_all()
+
+    def import_all(self):
+        folder = filedialog.askdirectory(title='Folder with BMG files')
         if not folder:
             return
         have = {n.lower(): n for n in os.listdir(folder)}
@@ -95,6 +99,25 @@ class BmgTab(Tab):
                     errors.append(str(e))
         self.draw()
         messagebox.showinfo('BMG', f'{done} file(s) selected.' + ('\n\nSkipped:\n' + '\n'.join(errors) if errors else ''))
+
+    def export_all(self):
+        folder = filedialog.askdirectory(title='Folder to export BMG files to')
+        if not folder or not self.files:
+            return
+        done, errors = 0, []
+        try:
+            for path, (name, _) in self.files.items():
+                try:
+                    data = self.session.raw(path)
+                    out = os.path.join(folder, name)
+                    with open(out, 'wb') as f:
+                        f.write(data)
+                    done += 1
+                except Exception as e:
+                    errors.append(f'{name}: {e}')
+            messagebox.showinfo('BMG', f'{done} file(s) exported to {folder}.' + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
+        except Exception as e:
+            messagebox.showerror('BMG', str(e))
 
     def patch_config(self):
         return {p: b for p, (n, b) in self.new.items()} or None

@@ -2,16 +2,19 @@
 
 The right side has two frames. Listen is a test (a voice, a play button): nothing there is written to the ROM. Everything
 in the other frame is: the text of the line (Sounds and Rhythm pages) and the presets of the voices (Voices page)."""
+import json
+import os
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 from ....features.speech.apply import speech_parts
 from ....features.speech.catalog import PresetCatalog
 from ....features.speech.engine import Speaker
 from ....features.speech.line import LIMIT
-from ....features.speech.lines import FAMILIES, LineEdits, speech_banks, tag_values
+from ....features.speech.lines import FAMILIES, LineEdits, bank_name, speech_banks, tag_values
 from ....features.speech.synth import Synthesizer
 from ...theme import MUTED, font
+from ...widgets import batch_buttons
 from ..listing import ListingTab
 from .editor import LineEditor
 from .listen import ListenBar
@@ -41,7 +44,12 @@ class VoiceTab(ListingTab):
         self.loaded, self.shown, self.notice = False, 0, ''
         self.bank = self.line = None
         self.editor = LineEditor(changed=self.line_changed, moved=self.refresh)
-        right = self.build_listing(weights=(2, 3), revert_all=self.revert_all, show='tree headings', columns=('say',))
+        right = self.build_listing(weights=(2, 3), batch=(self.export_lines, self.import_lines, self.revert_all), show='tree headings', columns=('say',))
+        self.tree.heading('#0', text='Line (as the player sees it)')
+        self.tree.heading('say', text='Said as')
+        self.tree.column('#0', width=180)
+        self.tree.column('say', width=120)
+        self.tree.bind('<<TreeviewSelect>>', self.pick)
         self.tree.heading('#0', text='Line (as the player sees it)')
         self.tree.heading('say', text='Said as')
         self.tree.column('#0', width=180)
@@ -70,6 +78,84 @@ class VoiceTab(ListingTab):
         for page, name in ((self.sounds, 'Sounds'), (self.rhythm, 'Rhythm'), (self.settings, 'Voices')):
             self.pages.add(page, text=f'  {name}  ')
         self.header()
+
+    # ----- voice lines batch export/import
+
+    def export_lines(self):
+        if not self.banks:
+            messagebox.showinfo('Voice lines', 'Load the ROM first.')
+            return
+        folder = filedialog.askdirectory(title='Folder to export voice lines to')
+        if not folder:
+            return
+        done = 0
+        try:
+            for bank in self.banks:
+                name = bank_name(bank.path) if hasattr(bank, 'path') else getattr(bank, 'name', '')
+                path = os.path.join(folder, f'{name}.json')
+                data = []
+                for line in bank.lines:
+                    data.append({
+                        'index': line.index,
+                        'id': getattr(line, 'id', None),
+                        'seen': line.display or '',
+                        'spoken': line.text,
+                        'reading': getattr(line, 'reading', ''),
+                        'label': line.label,
+                    })
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump({'bank': name, 'path': getattr(bank, 'path', ''), 'lines': data}, f, ensure_ascii=False, indent=2)
+                done += 1
+            messagebox.showinfo('Voice lines', f'{done} bank(s) exported to {folder}. Edit the "spoken" field and import back.')
+        except Exception as e:
+            messagebox.showerror('Voice lines', str(e))
+
+    def import_lines(self):
+        if not self.banks or not self.edits:
+            if not self.banks:
+                messagebox.showinfo('Voice lines', 'Load the ROM first.')
+                return
+        folder = filedialog.askdirectory(title='Folder with edited voice line JSON files')
+        if not folder:
+            return
+        by_path = {getattr(bank, 'path', ''): bank for bank in self.banks}
+        done, errors = 0, []
+        try:
+            for fn in os.listdir(folder):
+                if not fn.lower().endswith('.json'):
+                    continue
+                try:
+                    with open(os.path.join(folder, fn), encoding='utf-8') as f:
+                        data = json.load(f)
+                except Exception as e:
+                    errors.append(f'{fn}: {e}')
+                    continue
+                path = data.get('path') or next((p for p, b in by_path.items() if bank_name(p) == data.get('bank')), None)
+                if not path or path not in by_path:
+                    errors.append(f'{fn}: bank not found')
+                    continue
+                bank = by_path[path]
+                by_idx = {line.index: line for line in bank.lines}
+                for item in data.get('lines', []):
+                    idx = item.get('index')
+                    if idx not in by_idx:
+                        continue
+                    new = item.get('spoken')
+                    if new is None or new == '':
+                        continue
+                    line = by_idx[idx]
+                    if new == line.text:
+                        continue
+                    self.edits.set(path, idx, line.text, new)
+                    done += 1
+            self.fill()
+            if self.line is not None:
+                self.open_line(self.bank, self.line)
+            self.refresh()
+            self.changed()
+            messagebox.showinfo('Voice lines', f'{done} line(s) imported from {folder}.' + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
+        except Exception as e:
+            messagebox.showerror('Voice lines', str(e))
 
     # ----- the ROM
 

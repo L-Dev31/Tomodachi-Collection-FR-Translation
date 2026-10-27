@@ -29,9 +29,8 @@ class AudioTab(ListingTab):
         self.snd, self.new, self.sel = None, {}, None
         self.fit = tk.BooleanVar(value=True)
         right = self.build_listing(
-            weights=(2, 3), revert_all=self.revert_all, show='tree headings', columns=('dur', 'rate'),
-            more=[('Export listed sounds to a folder...', self.export_all),
-                  ('Replace from a folder (files named like exports)...', self.replace_folder)])
+            weights=(2, 3), batch=(self.export_all, self.replace_folder, self.revert_all),
+            show='tree headings', columns=('dur', 'rate'))
         self.tree.heading('#0', text='Sound (wave number, bank)')
         self.tree.heading('dur', text='Length')
         self.tree.heading('rate', text='Hz')
@@ -165,10 +164,16 @@ class AudioTab(ListingTab):
 
     def import_wav(self, i, data):
         """Stores a WAV as the new sound of wave i. Returns a note when the sound was changed to fit, else ''."""
-        rate, pcm = wav_read(data)
+        rate, pcm, loop = wav_read(data)
         w = self.snd.waves[i]
         limit = w['end'] - w['off']
         note = ''
+        if loop is not None:
+            ls, le = loop
+            if ls < 0 or le <= ls or le > len(pcm):
+                loop = None
+            else:
+                note = f'Loop set {ls} - {le} samples.'
         if swav_size(w, len(pcm)) > limit:
             if not self.fit.get():
                 note = f'It is {swav_size(w, len(pcm)) - limit:,} bytes bigger than the original: the ROM may not have room for it.'
@@ -179,8 +184,15 @@ class AudioTab(ListingTab):
                 if swav_size(w, len(resample(pcm, rate, r))) > limit:
                     raise ValueError('This sound is too long to fit in the space of the original.')
                 pcm, rate = resample(pcm, rate, r), r
-                note = f'Downsampled to {rate} Hz to fit the original size.'
+                if loop is not None:
+                    ls, le = int(loop[0] * r / rate), int(loop[1] * r / rate)
+                    loop = (max(0, ls), min(len(pcm), max(ls + 1, le)))
+                note = f'Downsampled to {rate} Hz to fit the original size.' + (f' Loop {loop[0]}-{loop[1]}.' if loop else '')
         self.new[i] = {'rate': rate, 'pcm': struct.pack('<%dh' % len(pcm), *pcm)}
+        if loop is not None:
+            self.new[i]['loop'] = loop
+        elif 'loop' in self.new.get(i, {}):
+            pass
         return note
 
     def replace(self):

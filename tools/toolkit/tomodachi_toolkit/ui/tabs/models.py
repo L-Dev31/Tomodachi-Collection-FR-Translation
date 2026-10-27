@@ -31,7 +31,7 @@ class ModelsTab(ListingTab):
     def build(self):
         self.items, self.by_iid, self.new, self.cur = [], {}, {}, None
         self.texs, self.pals = [], []
-        right = self.build_listing(search_width=22, weights=(1, 3), revert_all=self.revert_all)
+        right = self.build_listing(search_width=22, weights=(1, 3), batch=(self.export_all, self.import_all, self.revert_all))
         self.tree.bind('<<TreeviewSelect>>', self.select)
         self.view = tk.StringVar(value='3d')
         modes = ttk.Frame(right)
@@ -93,7 +93,7 @@ class ModelsTab(ListingTab):
         if self.cur is None:
             return
         path = self.cur[0]
-        self.model_view.load(self.file(*self.cur), lambda counts: model_actions(self.session, path, counts), keep=keep)
+        self.model_view.load(self.file(*self.cur), lambda scene: model_actions(self.session, path, scene), keep=keep)
 
     def set_state(self):
         def on(buttons, yes):
@@ -373,6 +373,73 @@ class ModelsTab(ListingTab):
             self.tree.selection_set(keep[0])
             self.select()
         return notes
+
+    def export_all(self):
+        folder = filedialog.askdirectory(title='Folder to export models to')
+        if not folder or not self.items:
+            return
+        done, errors = 0, []
+        try:
+            for it in self.items:
+                path = it['path']
+                try:
+                    subs = self.session.subfiles(path)
+                except Exception as e:
+                    errors.append(f'{path}: {e}')
+                    continue
+                idx = next((i for i, f in enumerate(subs) if f[:4] == b'BMD0'), None)
+                if idx is None:
+                    continue
+                try:
+                    obj, mtl, pngs, info = obj_export(subs[idx], obj_ident(file_stem(path.rsplit('/', 1)[1].removesuffix('_LZ.bin'))))
+                    stem = obj_ident(file_stem(path.rsplit('/', 1)[1].removesuffix('_LZ.bin')))
+                    model_folder = os.path.join(folder, stem)
+                    os.makedirs(model_folder, exist_ok=True)
+                    out = os.path.join(model_folder, stem + '.obj')
+                    write_obj_files(out, stem, obj, mtl, pngs)
+                    done += 1
+                except Exception as e:
+                    errors.append(f'{path}: {e}')
+            messagebox.showinfo('Export models', f'{done} model(s) exported to {folder}.' + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
+        except Exception as e:
+            messagebox.showerror('Export models', str(e))
+
+    def import_all(self):
+        folder = filedialog.askdirectory(title='Folder with exported models')
+        if not folder or not self.items:
+            return
+        done, errors = 0, []
+        # look for .obj files in subfolders
+        for root, dirs, files in os.walk(folder):
+            for fn in files:
+                if not fn.lower().endswith('.obj'):
+                    continue
+                obj_path = os.path.join(root, fn)
+                try:
+                    with open(obj_path, encoding='utf-8', errors='replace') as f:
+                        text = f.read()
+                except Exception as e:
+                    errors.append(f'{fn}: {e}')
+                    continue
+                # find matching model by stem
+                stem = fn[:-4]
+                for it in self.items:
+                    name = it['path'].rsplit('/', 1)[1].removesuffix('_LZ.bin')
+                    if name == stem or file_stem(name) == stem or obj_ident(name) == stem:
+                        try:
+                            subs = self.session.subfiles(it['path'])
+                            idx = next((i for i, f in enumerate(subs) if f[:4] == b'BMD0'), None)
+                            if idx is None:
+                                break
+                            out, rep = obj_import(subs[idx], text)
+                            if out is not None and out != subs[idx]:
+                                self.new[(it['path'], idx)] = out
+                                done += 1
+                        except Exception as e:
+                            errors.append(f'{fn}: {e}')
+                        break
+        self.fill()
+        messagebox.showinfo('Import models', f'{done} model(s) imported.' + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
 
     def summary(self):
         return f'{len({p for p, _ in self.new})} changed' if self.new else 'Unchanged'
