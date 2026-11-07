@@ -1,7 +1,8 @@
 """The sounds of the speech engine: katakana with their romaji, the marks that shape the rhythm, and how a text is cut into sounds.
 
 The engine only reads katakana. A sound (a mora) is one katakana, or one katakana followed by a small one (キャ, ファ, ウォ).
-Nothing here is typed by the person: the Voice tab offers these tables as buttons."""
+These tables only feed the buttons of the Voice tab. They are never used to convert what a person writes: a line is kept
+exactly as it is typed."""
 
 # ----- the marks the engine understands
 # mark -> (name, what it does). The ASCII twins (_ . ! ? / | ') sound exactly the same and are found in some game lines.

@@ -4,9 +4,8 @@ import struct
 
 from ...core.compression import lz10, lz10c
 from ...core.binary import u32
-from .glyphs import FONTS, GLYPHS, font_symbol, set_symbol, symbol_pictures
+from .glyphs import FONTS, GLYPHS, YEN_CODE, font_symbol, set_symbol, symbol_pictures
 from .thunks import branch, cents_thunk, thunk
-from .data import SYMBOL
 
 
 FMT = 0x20364E0
@@ -72,8 +71,28 @@ def convert(value, rate):
     return max(1, math.floor(value * rate + 0.5)) if value else 0
 
 
+def draw_symbol(rom, sym):
+    """What the symbol of the money changes in the ROM: ({path of a font: the font as it must be}, the 7 by 7 picture of the symbol for
+    the pictures that have a yen sign). Nothing changes for the yen sign of the game itself ({}, None). Raises ValueError when the
+    symbol is not one character that all three fonts draw."""
+    if len(sym) != 1:
+        raise ValueError('The symbol must be one character.')
+    if ord(sym) == YEN_CODE:
+        return {}, None
+    files, fonts = rom.files(), {}
+    for path in FONTS:
+        s, e = rom.fat(files[path])
+        fonts[path] = lz10(bytes(rom.d[s:e]))
+    small = font_symbol(fonts[FONTS[0]], sym)
+    if small is None:
+        raise ValueError(f'The fonts of the game cannot draw {sym!r}.')
+    pattern = [''.join('#' if small[0][j * 7 + i] else '.' for i in range(7)) for j in range(7)]
+    return {path: set_symbol(font, sym) for path, font in fonts.items()}, pattern
+
+
 def apply_currency(rom, arm9, cfg, log):
     rate, code, sym = cfg['rate'], cfg['code'], cfg['sym']
+    fonts, pattern = draw_symbol(rom, sym)                      # before anything is changed: a symbol the fonts cannot draw stops here
     whole = cfg['whole'] or not cents_ok(code, rate)
     scale = rate if whole else rate * 100
     base = 0x02000000
@@ -124,19 +143,11 @@ def apply_currency(rom, arm9, cfg, log):
     rom.put_file(fid, bytes(blob))
     struct.pack_into('<I', rom.d, ent + 28, 0)
     files = rom.files()
-    char, cp, letter, bars = SYMBOL[code]
-    letter = letter or code[0]
-    spec = (ord(sym), letter, bars) if sym != char else (cp, letter, bars)
-    s, e = rom.fat(files[FONTS[0]])
-    bits = font_symbol(lz10(bytes(rom.d[s:e])), spec)[0]
-    pat = [''.join('#' if bits[j * 7 + i] else '.' for i in range(7)) for j in range(7)]
-    for path in FONTS:
+    for path, font in fonts.items():
+        log(path)
+        rom.put_file(files[path], lz10c(font))
+    for path, hits in (GLYPHS.items() if pattern else []):
         log(path)
         fid = files[path]
         s, e = rom.fat(fid)
-        rom.put_file(fid, lz10c(set_symbol(lz10(bytes(rom.d[s:e])), spec)))
-    for path, hits in (GLYPHS.items() if spec[0] != 0xFFE5 else []):
-        log(path)
-        fid = files[path]
-        s, e = rom.fat(fid)
-        rom.put_file(fid, lz10c(symbol_pictures(lz10(bytes(rom.d[s:e])), hits, pat)))
+        rom.put_file(fid, lz10c(symbol_pictures(lz10(bytes(rom.d[s:e])), hits, pattern)))

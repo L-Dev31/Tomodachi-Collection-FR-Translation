@@ -5,7 +5,7 @@ from tkinter import filedialog, messagebox, ttk
 from ...core.binary import u32
 from ...features.meta import LANGS, REQUIREMENTS, banner_read, fit32, icon_grid, quantize
 from ..theme import BROWN, MUTED, PANEL, SAND, font
-from ..widgets import caption, card
+from ..widgets import RevertButton, caption, card
 from .base import Tab
 
 
@@ -15,6 +15,8 @@ class MetaTab(Tab):
     heading = 'Meta'
 
     def build(self):
+        self.revert_button = RevertButton(self, self.revert)
+        self.revert_button.pack(side='bottom', anchor='e', pady=(12, 0))       # packed first: it keeps its place at the bottom
         self.lang = tk.StringVar(value='English')
         self.internal = tk.StringVar()
         self.current = 'English'
@@ -24,7 +26,6 @@ class MetaTab(Tab):
         self.badge = tk.Label(box, bg=PANEL, bd=0)
         self.badge.grid(row=0, column=0, rowspan=2, sticky='n')
         ttk.Button(box, text='Change icon', style='Accent.TButton', command=self.change_icon).grid(row=0, column=1, padx=16, sticky='w')
-        ttk.Button(box, text='Reset icon', style='Soft.TButton', command=self.reset_icon).grid(row=1, column=1, padx=16, pady=(6, 0), sticky='w')
         tk.Label(box, text=REQUIREMENTS, bg=PANEL, fg=MUTED, font=font(8), justify='left').grid(row=0, column=2, rowspan=2, sticky='w')
         title = card(self, pady=12)
         title.pack(fill='x', pady=(12, 0))
@@ -100,11 +101,18 @@ class MetaTab(Tab):
         self.draw_icon(icon)
         self.changed()
 
-    def reset_icon(self):
-        self.icon_new = None
-        if self.orig_icon:
-            self.draw_icon(self.orig_icon)
+    def revert(self):
+        """The title, the icon and the internal name as the ROM has them."""
+        self.restore({})
         self.changed()
+
+    def changed(self):
+        super().changed()
+        if hasattr(self, 'revert_button'):
+            try:
+                self.revert_button.show(bool(self.patch_config()))
+            except ValueError:
+                self.revert_button.show(True)
 
     def patch_config(self):
         if self.session is None:

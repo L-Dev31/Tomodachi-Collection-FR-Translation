@@ -41,11 +41,15 @@ class Rom:
         walk(0xF000, '/')
         return out
 
-    def append(self, blob):
+    def end(self):
+        """Where the used part of the image ends (a multiple of 512): new files go there."""
         if not self.tail:
             ends = [self.fat(i)[1] for i in range(u32(self.d, 0x4C) // 8)]
             self.tail = (max(ends + [u32(self.d, 0x50) + u32(self.d, 0x54), u32(self.d, 0x80)]) + 0x1FF) & ~0x1FF
-        off = self.tail
+        return self.tail
+
+    def append(self, blob):
+        off = self.end()
         if off + len(blob) > len(self.d):
             self.d.extend(b'\xff' * (off + len(blob) - len(self.d)))
         self.d[off:off + len(blob)] = blob
@@ -55,6 +59,25 @@ class Rom:
     def put_file(self, fid, blob):
         off = self.append(blob)
         self.set_fat(fid, off, off + len(blob))
+
+    def grow_file(self, fid, blob):
+        """Stores blob as the file fid where the file is. When it is longer than the file was, the files in the way (the ones that
+        follow it in the image) move to the end of the image, so a big archive grows without being copied."""
+        s, e = self.fat(fid)
+        end = s + len(blob)
+        if end > e:
+            if end > self.end():
+                self.tail = (end + 0x1FF) & ~0x1FF
+                if self.tail > len(self.d):
+                    self.d.extend(b'\xff' * (self.tail - len(self.d)))
+            for other in range(u32(self.d, 0x4C) // 8):
+                a, b = self.fat(other)
+                if other != fid and b > a and a < end and b > e:
+                    data = bytes(self.d[a:b])
+                    self.d[a:b] = b'\xff' * (b - a)
+                    self.put_file(other, data)
+        self.d[s:end] = blob
+        self.set_fat(fid, s, end)
 
     def arm9(self):
         off, size = u32(self.d, 0x20), u32(self.d, 0x2C)

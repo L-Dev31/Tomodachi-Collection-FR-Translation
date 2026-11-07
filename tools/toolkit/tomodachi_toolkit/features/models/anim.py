@@ -4,6 +4,7 @@ import struct
 
 from ...core.binary import u16, u32
 from .bmd import dict_entries
+from .cells import Cell
 from .matrix import cross, pivot_rot, unit
 
 # What the tag of a node says about its translation, rotation and scale (the node index is in the top byte).
@@ -20,10 +21,18 @@ class Track:
     """The samples of one number (or of the rotation indices) over the frames of an animation.
 
     The samples are stored every `1 << shift` frames up to the frame `last`; after it every frame has its own sample."""
-    __slots__ = ('data', 'shift', 'last')
+    __slots__ = ('data', 'shift', 'last', 'cells')
 
-    def __init__(self, data, shift=0, last=0):
+    def __init__(self, data, shift=0, last=0, cells=None):
         self.data, self.shift, self.last = data, shift, last
+        self.cells = cells or [None] * len(data)         # where each sample is in the file (Cell), to change it
+
+    def frames(self):
+        """The frame of each sample."""
+        if not self.shift:
+            return list(range(len(self.data)))
+        top = self.last >> self.shift
+        return [i << self.shift if i <= top else self.last + i - top for i in range(len(self.data))]
 
     def span(self, frame):
         """(first sample, second sample, weight of the second) that make the value at a frame."""
@@ -52,7 +61,7 @@ def track_size(info, frames):
     return shift, bool(info >> 29 & 1), last, (last >> shift) + 1 + max(0, frames - 1 - last)
 
 
-def _read(b, o, n, size, fmt):
+def read_numbers(b, o, n, size, fmt):
     """n numbers of the given struct format at o (the missing ones at the end of a short file repeat the last one)."""
     n = max(0, min(n, (len(b) - o) // size))
     out = list(struct.unpack_from('<%d%s' % (n, fmt), b, o)) if n else []
@@ -89,6 +98,7 @@ def rot_blend(a, b, w):
 
 class JointAnimation:
     """One animation of a BCA0 file: for every node, how its translation, rotation and scale change."""
+    kind = 'joint'
 
     def __init__(self, b, name, o):
         self.name, self.b, self.o = name, b, o
@@ -103,14 +113,16 @@ class JointAnimation:
         b = self.b
         if const:
             v = struct.unpack_from('<i', b, p)[0] / FIX
-            return Track([v]), p + (8 if scale else 4)
+            return Track([v], cells=[Cell(p, 'i', FIX, scale)]), p + (8 if scale else 4)
         info, off = u32(b, p), u32(b, p + 4)
         shift, short, last, n = track_size(info, self.frames)
         o = self.o + off
         mult = 2 if scale else 1
-        data = _read(b, o, n * mult, 2 if short else 4, 'h' if short else 'i')
+        size, fmt = (2, 'h') if short else (4, 'i')
+        data = read_numbers(b, o, n * mult, size, fmt)
         data = [x / FIX for x in data[::mult]]
-        return Track(data, shift, last), p + 8
+        cells = [Cell(o + k * mult * size, fmt, FIX, scale) if o + (k * mult + mult) * size <= len(b) else None for k in range(len(data))]
+        return Track(data, shift, last, cells), p + 8
 
     def _node(self, p):
         b = self.b
@@ -128,13 +140,14 @@ class JointAnimation:
             node['t'] = 'base'
         if not tag & (R_NONE | R_BASE):
             if tag & R_CONST:
-                node['r'] = Track([u32(b, p) & 0xFFFF])
+                node['r'] = Track([u32(b, p) & 0xFFFF], cells=[Cell(p, 'H')])
                 p += 4
             else:
                 info, off = u32(b, p), u32(b, p + 4)
                 p += 8
                 shift, _, last, n = track_size(info, self.frames)
-                node['r'] = Track(_read(b, self.o + off, n, 2, 'H'), shift, last)
+                data = read_numbers(b, self.o + off, n, 2, 'H')
+                node['r'] = Track(data, shift, last, [Cell(self.o + off + 2 * k, 'H') if self.o + off + 2 * k + 2 <= len(b) else None for k in range(len(data))])
         elif tag & R_BASE:
             node['r'] = 'base'
         if not tag & (S_NONE | S_BASE):

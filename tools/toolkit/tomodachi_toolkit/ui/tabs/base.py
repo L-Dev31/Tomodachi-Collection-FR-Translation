@@ -1,6 +1,8 @@
 """What every tab of the window has in common."""
 from tkinter import ttk
 
+from ..history import History
+
 
 class Tab(ttk.Frame):
     """A page of a notebook (the parent: the top one, or the one of its group).
@@ -17,6 +19,7 @@ class Tab(ttk.Frame):
     def __init__(self, app, parent, padding=14):
         super().__init__(parent, padding=padding)
         self.app = app
+        self.history = History(self)         # Ctrl+Z and Ctrl+Shift+Z (the window sends them to the tab on show)
         self.build()
 
     @property
@@ -32,6 +35,9 @@ class Tab(ttk.Frame):
     def on_show(self):
         """The tab was selected: load what is slow to load."""
 
+    def on_hide(self):
+        """Another tab was selected: stop what this one was doing (a sound that plays, for instance)."""
+
     def patch_config(self):
         """The part of the patch configuration of this tab, or None when nothing changed. May raise ValueError."""
         return None
@@ -44,8 +50,17 @@ class Tab(ttk.Frame):
         """Puts a project part back. Returns a list of notes for what could not be restored."""
         return []
 
+    def snapshot(self):
+        """What undo keeps of the tab: its edits."""
+        return self.project_part()
+
+    def rollback(self, state):
+        """Puts back a state that snapshot() gave."""
+        self.restore(state)
+
     def summary(self):
         return 'Unchanged'
 
     def changed(self):
+        self.history.record()
         self.app.refresh_summary()

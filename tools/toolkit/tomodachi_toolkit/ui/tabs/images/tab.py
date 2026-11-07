@@ -10,7 +10,7 @@ from ....core.png import png_read, png_write, png_write_indexed
 from ....features.images.catalog import IMG_DIRS, img_items
 from ....features.images.render import encode_screen, encode_sheet, render_screen, render_sheet, sheet_indices
 from ...theme import BROWN, DARK, MUTED
-from ...widgets import Hint, ImageView
+from ...widgets import Hint, ImageView, InfoTable
 from ..listing import ListingTab
 from .palette import PaletteView, hex_of
 
@@ -34,14 +34,11 @@ class ImagesTab(ListingTab):
         self.layouts, self.pals, self.color = {SHEET: None}, {'Greys': None}, None      # how the picture can be shown, its palettes, the colour picked
         right = self.build_listing(search_width=26, weights=(1, 4), batch=(self.export_all, self.import_all, self.revert_all))
         self.tree.bind('<<TreeviewSelect>>', self.select)
-        tools = ttk.Frame(right)
-        tools.pack(fill='x')
-        self.buttons = [ttk.Button(tools, text=t, style=s, command=c) for t, s, c in (
-            ('Replace with PNG', 'Accent.TButton', self.replace),
-            ('Export PNG', 'Soft.TButton', self.export),
-            ('Revert', 'Soft.TButton', self.revert))]
-        for b in self.buttons:
-            b.pack(side='left', padx=(0, 6))
+        self.build_menu(lambda iid: [('Export PNG...', self.export), ('Replace with PNG...', self.replace), None,
+                                     ('Revert', self.revert if any(k in self.new for k in self.keys_of(self.by_iid[iid])) else None)]
+                        if iid in self.by_iid else [])
+        self.table = InfoTable(right)
+        self.table.pack(fill='x')
         # How to show the picture: only the choices that mean something for the selected image appear.
         self.options = ttk.Frame(right)
         self.layout, self.pal = tk.StringVar(), tk.StringVar()
@@ -49,13 +46,17 @@ class ImagesTab(ListingTab):
         self.layout_box = ttk.Combobox(self.options, textvariable=self.layout, state='readonly', width=36)
         self.wt_box = ttk.Spinbox(self.options, from_=1, to=64, textvariable=self.wt, width=3, command=lambda: self.show(True))
         self.fields = {}
-        for name, label, widget in (
-                ('layout', 'Show as', self.layout_box),
-                ('wt', 'Tiles per row', self.wt_box)):
+        for name, label, widget, hint in (
+                ('layout', 'Show as', self.layout_box, 'All the tiles: the small 8 x 8 pieces the picture is made of, side by side, as the '
+                 'game stores them.\nA screen: the same tiles put together the way the game shows them.'),
+                ('wt', 'Tiles per row', self.wt_box, 'How many 8 x 8 tiles the sheet shows on each line. It only changes how the pieces '
+                 'are laid out in the picture you export or import: use the same number both times.')):
             field = ttk.Frame(self.options)
             text = ttk.Label(field, text=label, foreground=MUTED)
             text.pack(side='left', padx=(0, 3))
             widget.pack(in_=field, side='left')
+            for part in (text, widget):
+                Hint(part, hint)
             self.fields[name] = field
         self.layout_box.bind('<<ComboboxSelected>>', lambda e: self.layout_changed())
         self.wt_box.bind('<Return>', lambda e: self.show(True))
@@ -82,12 +83,15 @@ class ImagesTab(ListingTab):
     def reset_view(self):
         self.options.pack_forget()
         self.side.pack_forget()
-        self.viewer.clear('Select an image in the list.')
+        self.viewer.clear()
+        self.table.show([])
         self.set_state()
 
     def set_state(self):
-        for b in self.buttons:
-            b.state(['!disabled'] if self.sel is not None else ['disabled'])
+        self.sync_revert()
+
+    def item_changed(self):
+        return self.sel is not None and any(k in self.new for k in self.keys_of(self.sel))
 
     def on_rom(self):
         self.scan_id += 1
@@ -176,6 +180,8 @@ class ImagesTab(ListingTab):
         self.bank.set(0)
         self.wt.set(it['tw'] or 16)
         self.color = None
+        self.table.show([('Image', it['name']), ('Folder', it['group']), ('Depth', f"{it['bits']} bit"), ('Palettes', str(len(it['pals']))),
+                         ('Screens', str(len(it['scrs'])))])
         self.set_state()
         self.show_fields()
         self.side.pack(side='right', anchor='n', padx=(10, 0), before=self.viewer)
@@ -262,7 +268,7 @@ class ImagesTab(ListingTab):
         elif scr:
             note = 'The outlined rows hold the colours the game picks for the tiles of this screen.'
         else:
-            note = ''
+            note = 'The tiles use one row of 16 colours (outlined). Click another row to see them in its colours.'
         self.pal_note.set(note)
         self.describe_color(self.color)
         self.change_button.state(['!disabled'] if self.editable() else ['disabled'])
@@ -389,8 +395,11 @@ class ImagesTab(ListingTab):
             self.show()
 
     def export_all(self):
-        folder = filedialog.askdirectory()
-        if not folder or self.scanning:
+        """The listed images as PNG files in a folder (named like the list names them)."""
+        if self.scanning:
+            return
+        folder = filedialog.askdirectory(title='Folder to export the listed images to')
+        if not folder:
             return
         items = list(self.by_iid.values())
         try:
@@ -405,28 +414,36 @@ class ImagesTab(ListingTab):
         self.fill()
         messagebox.showinfo('Export images', f'{len(items)} image(s) exported to {folder}')
 
-    def replace_folder(self):
-        self.import_all()
-
     def import_all(self):
-        folder = filedialog.askdirectory(title='Folder to import images from')
-        if not folder or self.scanning:
+        """The PNG files of a folder that are named like the export names them. One that looks like the picture the ROM has is no change."""
+        if self.scanning:
+            return
+        folder = filedialog.askdirectory(title='Folder with the PNG files named like the exports')
+        if not folder:
             return
         have = {n.lower(): n for n in os.listdir(folder)}
-        done, errors = 0, []
+        done = same = 0
+        errors = []
         for it in self.items:
             name = (it['file'] + '.png').lower()
             if name not in have:
                 continue
+            key = (it['path'], it['idx'])
+            before = self.new.get(key)
             try:
                 with open(os.path.join(folder, have[name]), 'rb') as f:
                     self.import_png(it, f.read(), default_view(it))
-                done += 1
             except Exception as e:
                 errors.append(f'{have[name]}: {e}')
+                continue
+            if self.new.get(key) != before:
+                done += 1
+            else:
+                same += 1
         self.fill()
         self.show()
-        messagebox.showinfo('Replace from folder', f'{done} image(s) imported.' + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
+        messagebox.showinfo('Import images', f'{done} image(s) imported' + (f', {same} the same as they are now' if same else '') + '.'
+                            + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
 
     # ----- patch and project
 

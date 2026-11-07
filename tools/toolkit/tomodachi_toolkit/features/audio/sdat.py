@@ -78,6 +78,12 @@ def wave_pcm(f, w):
     return [(x - 256 if x > 127 else x) << 8 for x in d]
 
 
+def wave_loop_start(w):
+    """Number of the sample a wave that repeats starts again from (its loop start counts 32 bit words: 4 samples of 8 bits, 2 of 16 bits,
+    8 of 4 bits, the first word of those being the header)."""
+    return {0: w['lp'] * 4, 1: w['lp'] * 2}.get(w['enc'], max(0, w['lp'] * 8 - 7))
+
+
 def wave_length(w):
     """Number of samples of a wave, worked out from its size (no decoding)."""
     words = w['lp'] + w['ln']
@@ -86,7 +92,7 @@ def wave_length(w):
     return words * 2 if w['enc'] == 1 else words * 4
 
 
-def wave_encode(w, rate, pcm, loop=None):
+def wave_encode(w, rate, pcm):
     """Build a SWAV (header + data) replacing wave w, keeping its encoding and loop flag."""
     if w['enc'] == 2:
         data = ima_encode(pcm)
@@ -97,19 +103,10 @@ def wave_encode(w, rate, pcm, loop=None):
     data += b'\0' * (-len(data) % 4)
     words = len(data) // 4
     old = max(1, w['lp'] + w['ln'])
-    do_loop = w['loop'] if loop is None else bool(loop)
     lp = 0
-    if do_loop:
-        if loop is not None and len(loop) == 2:
-            ls, le = loop
-            old_samples = len(pcm)
-            ls = max(0, int(ls))
-            le = min(len(pcm), int(le))
-            lp_words = max(1 if w['enc'] == 2 else 0, int(ls * words / max(1, old_samples)))
-            lp = min(words - 1, lp_words)
-        elif w['loop']:
-            lp = max(1 if w['enc'] == 2 else 0, min(words - 1, round(w['lp'] * words / old)))
-    return struct.pack('<BBHHHI', w['enc'], 1 if (do_loop and loop is not None and len(loop) == 2) or (loop is None and w['loop']) else (1 if loop is not None and loop == True else 0), rate, min(65535, 16756991 // max(rate, 1)), lp, max(1, words - lp) if (do_loop) else 0) + data
+    if w['loop']:
+        lp = max(1 if w['enc'] == 2 else 0, min(words - 1, round(w['lp'] * words / old)))
+    return struct.pack('<BBHHHI', w['enc'], w['loop'], rate, min(65535, 16756991 // max(rate, 1)), lp, words - lp) + data
 
 
 def swar_build(f, repl):

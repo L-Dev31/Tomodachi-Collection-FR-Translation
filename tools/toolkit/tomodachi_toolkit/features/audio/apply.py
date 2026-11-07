@@ -9,8 +9,7 @@ def apply_audio(rom, new, log):
     repl = {}
     for i, a in new.items():
         pcm = list(struct.unpack('<%dh' % (len(a['pcm']) // 2), a['pcm']))
-        loop = a.get('loop')
-        swav = wave_encode(snd.waves[i], a['rate'], pcm, loop=loop)
+        swav = wave_encode(snd.waves[i], a['rate'], pcm)
         room = snd.waves[i]['end'] - snd.waves[i]['off']
         repl[i] = swav + b'\0' * (room - len(swav)) if len(swav) <= room else swav
     store_sdat(rom, snd, sdat_rebuild(snd.sd, {snd.swar_fid: swar_build(snd.swar, repl)}), log)

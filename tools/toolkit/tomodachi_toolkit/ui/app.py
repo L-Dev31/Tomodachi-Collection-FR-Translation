@@ -1,6 +1,6 @@
 """The window: the tabs, the ROM that is open, and what needs all the tabs (patch, BPS export, project file)."""
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 from ..core.binary import u32
 from ..core.bps import bps_apply, bps_make, bps_meta
@@ -10,19 +10,10 @@ from .player import AudioPlayer
 from .session import Session
 from .pages import Pages
 from .tabs import GROUPS
-from .theme import BG, DARK, MUTED, apply_theme, font
+from .theme import BG, DARK, apply_theme, font
+from .widgets import flash
 
-# Credits for APIs, formats and libraries used in this toolkit
-CREDITS = [
-    ('Toolkit', 'L-DEV31 / TomoDS Team'),
-    ('ROM format', 'Nitro System (NDS)'),
-    ('Audio', 'IMA ADPCM / SWAR (SAD)'),
-    ('Fonts', 'NFTR (Nitro Font Reverse Engineered)'),
-    ('Math', 'Python stdlib (math, struct)'),
-    ('UI', 'Tkinter (stdlib)'),
-    ('JSON', 'Python stdlib'),
-    ('Project', 'Tomodachi Collection FR Translation'),
-]
+CREDIT = '2026 by L-DEV31 - TomoDS Team'
 
 
 class App(tk.Tk):
@@ -31,10 +22,11 @@ class App(tk.Tk):
         self.title('Tomodachi Location Toolkit')
         self.configure(bg=BG)
         self.minsize(640, 600)
-        self.geometry('920x720')
+        self.geometry('960x780')
         apply_theme(self)
         self.session = None
         self.player = AudioPlayer()
+        self.visible = None                 # the tab on show (the one that is told when another comes)
         self.ready = False
         self.pages = Pages(self, GROUPS, self.tab_shown)
         self.pages.pack(fill='both', expand=True, padx=12, pady=(12, 0))
@@ -43,11 +35,11 @@ class App(tk.Tk):
         self.rom_tab.add_summary(self.tabs)
         footer = tk.Frame(self, bg=BG, pady=10)
         footer.pack(fill='x')
-        tk.Label(footer, text='2026 by L-DEV31 - TomoDS Team', bg=BG, fg=DARK, font=font(9)).pack(side='left')
-        # Credits line
-        credits_text = ' | '.join(f'{name}' for name, _ in CREDITS)
-        tk.Label(footer, text=credits_text, bg=BG, fg=MUTED, font=font(7)).pack(side='left', padx=(20, 0))
+        self.credit = tk.Label(footer, text=CREDIT, bg=BG, fg=DARK, font=font(9, True))
+        self.credit.pack()
         self.bind_all('<Control-f>', self.find)
+        for key in ('z', 'Z'):                              # Ctrl+Z and Ctrl+Shift+Z (the Shift bit tells them apart, not the letter: Caps Lock)
+            self.bind_all(f'<Control-KeyPress-{key}>', lambda e: self.step(bool(e.state & 1)))
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.ready = True
         self.lock()
@@ -66,9 +58,22 @@ class App(tk.Tk):
         """Goes to a tab, whatever group it is in."""
         self.pages.show(tab)
 
+    def tab_of(self, key):
+        return next(tab for tab in self.tabs if tab.key == key)
+
+    def open_bank(self, name):
+        """A link to the music that plays with a bank (from the Audio tab): goes to the BGM tab and lists those sequences."""
+        tab = self.tab_of('bgm')
+        self.show_tab(tab)
+        tab.show_bank(name)
+
     def tab_shown(self):
         if self.session is not None:
-            self.current_tab().on_show()
+            tab = self.current_tab()
+            before, self.visible = self.visible, tab
+            if before is not None and before is not tab:
+                before.on_hide()
+            tab.on_show()
 
     def find(self, event=None):
         """Ctrl+F: go to the search box of the tab that has one."""
@@ -76,6 +81,18 @@ class App(tk.Tk):
         if self.session is not None and entry is not None:
             entry.focus_set()
             entry.select_range(0, 'end')
+
+    def step(self, redo):
+        """Ctrl+Z (undo) and Ctrl+Shift+Z (redo) on the tab on show. A text field keeps its own undo. The footer says what happened."""
+        try:
+            typing = isinstance(self.focus_get(), (tk.Text, tk.Entry, ttk.Entry))
+        except KeyError:                                    # the list of a combo box has the focus
+            typing = False
+        if self.session is None or typing:
+            return
+        tab = self.current_tab()
+        word = 'Redo' if redo else 'Undo'
+        flash(self.credit, f'{word}: {tab.title}' if tab.history.step(redo) else f'Nothing to {word.lower()}', CREDIT)
 
     def lock(self):
         """Only the ROM tab works until a ROM is open."""
@@ -112,6 +129,8 @@ class App(tk.Tk):
         self.session = session
         for tab in self.tabs:
             tab.on_rom()
+        for tab in self.tabs:
+            tab.history.reset()
         self.lock()
         self.refresh_summary()
         self.tab_shown()
@@ -184,7 +203,7 @@ class App(tk.Tk):
         try:
             source = {'crc32': self.session.crc32, 'name': self.session.name}
             blob = project_dump(parts['currency'], parts['keyboard'], parts['meta'], parts['bmg'], parts['images'],
-                                parts['models'], parts['audio'], parts['speech'], source)
+                                parts['models'], parts['audio'], parts['speech'], source, parts['bgm'], parts['fonts'])
             with open(out, 'wb') as f:
                 f.write(blob)
             self.log(f'Project saved ({len(blob) / 1024:,.0f} KB)')

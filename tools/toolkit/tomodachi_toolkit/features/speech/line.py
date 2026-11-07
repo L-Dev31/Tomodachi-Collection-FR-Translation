@@ -32,6 +32,22 @@ ABSOLUTE = {'Pit': 'pitch', 'Spd': 'length', 'Vol': 'volume'}      # commands th
 CARRIERS = ('mora', 'slot')                                         # items that have a pitch, a length and a volume
 
 
+def size(text):
+    """How much room a text takes in the game, in 16 bit characters (a game code counts for its size). Raises ValueError
+    for a game code or a brace that is not written right."""
+    return len(bmg_raw(text)) // 2
+
+
+def problem(text):
+    """Why the game cannot hold this text as a speech line (a game code or a brace not written right, a line too long),
+    or None. Nothing else is checked: what the text says is the business of the person who writes it."""
+    try:
+        n = size(text)
+    except ValueError as e:
+        return str(e)
+    return f'A speech line can hold {LIMIT} characters at most (this one has {n}).' if n > LIMIT else None
+
+
 def parse(text):
     """The items of a text (in the form of core.bmg.bmg_text)."""
     items, run = [], ''
@@ -106,7 +122,7 @@ class LineModel:
 
     def length(self):
         """Size of the line in the game (16 bit characters), to compare with LIMIT."""
-        return len(bmg_raw(items_text(self.items))) // 2
+        return size(items_text(self.items))
 
     def mood_index(self):
         """Index of the command that sets the mood of the whole line (a mood name before any sound), or None."""
@@ -191,6 +207,18 @@ class LineModel:
         if self.items:
             self._push()
             self.items = []
+
+    def set_text(self, text):
+        """Makes the whole line this text, written as the texts of the game are (game codes as {hex}, a brace twice). One
+        step of undo. The text is kept as it is: nothing is converted, only what the game cannot hold is refused
+        (ValueError, and the line stays as it was)."""
+        bad = problem(text)
+        if bad:
+            raise ValueError(bad)
+        if text == self.text():
+            return
+        self._push()
+        self.items = parse(text)
 
     def insert(self, at, text):
         """Puts the items of text (sounds, marks) in front of the item at index at. Returns the index of the last new item."""

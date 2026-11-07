@@ -1,11 +1,11 @@
-"""Order of the soft keyboard tabs."""
+"""The order of the tabs of the soft keyboard (Japanese, QWERTY, Accents, Symbols, Emojis) and their icons."""
 import struct
 
-from ..core.compression import lz10, lz10c
-from ..core.binary import u16, u32
-from ..core.nitro import rgcn
-from ..core.narc import narc_offsets
-from ..core.rom import Rom
+from ...core.compression import lz10, lz10c
+from ...core.binary import u16, u32
+from ...core.nitro import rgcn
+from ...core.narc import narc_offsets
+from ...core.rom import Rom
 
 
 KEYBOARDS = ['Japanese', 'QWERTY', 'Accents', 'Symbols', 'Emojis']
@@ -58,7 +58,9 @@ def kb_pixels(data):
     return out
 
 
-def apply_keyboard(rom, arm9, order, log):
+def apply_order(rom, arm9, order, log):
+    """Puts the keyboard tabs in a new order: the five kinds in the table of the game, the first one the keyboard opens on,
+    and the icons of the tabs (picture tiles of the keyboard file)."""
     base = 0x02000000
     if sorted(order) != sorted(KEYBOARDS):
         raise RuntimeError('invalid keyboard order')

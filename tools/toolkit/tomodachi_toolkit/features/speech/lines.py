@@ -124,6 +124,15 @@ def tag_values(banks):
     return {name: [v for v, _ in count.most_common()] for name, count in seen.items()}
 
 
+def code_counts(banks):
+    """[(game code as hex, number of lines that use it)] for the codes found inside the lines, the most used first."""
+    seen = collections.Counter()
+    for bank in banks:
+        for line in bank.lines:
+            seen.update({p[1] for p in pieces(line.text) if p[0] == 'code'})
+    return sorted(seen.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
 class LineEdits:
     """The lines that were changed: {path: {index: (the text in the ROM, the new text)}}."""
 
@@ -157,6 +166,10 @@ class LineEdits:
 
     def clear(self):
         self.data.clear()
+
+    def drop(self, path):
+        """Forgets the changes of a message file (it was replaced: its lines are other lines now)."""
+        self.data.pop(path, None)
 
     def config(self):
         """The changes as plain data, for the patch and the project file: {path: {'12': [old, new]}}."""

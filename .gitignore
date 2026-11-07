@@ -12,3 +12,11 @@ tools/toolkit/RESEARCH.md
 /tools/toolkit/tomodachi_toolkit/ui/tabs/voice/__pycache__
 tools/bmgrom.py
 /tools/toolkit/tests
+/tools/toolkit/tomodachi_toolkit/features/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/audio/__pycache__
+/tools/toolkit/__pycache__
+/tools/toolkit/tomodachi_toolkit/ui/tabs/images/__pycache__
+/tools/toolkit/tomodachi_toolkit/ui/tabs/keyboard/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/fonts/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/keyboard/__pycache__
+/tools/toolkit/tomodachi_toolkit/features/bgm/__pycache__

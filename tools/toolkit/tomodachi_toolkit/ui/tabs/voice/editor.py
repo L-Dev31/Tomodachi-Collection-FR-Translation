@@ -121,11 +121,13 @@ class LineEditor:
             self.sel = None
             self.done()
 
-    def undo(self):
-        if self.model is not None and self.model.history:
-            self.model.undo()
-            self.error = ''
-            self.done()
+    def set_text(self, text):
+        """Makes the whole line this text (one step of undo). Returns False when the game cannot hold it (self.error says why)."""
+        if not self.attempt(lambda m: m.set_text(text))[0]:
+            return False
+        self.sel = None
+        self.done()
+        return True
 
     def revert(self):
         if self.model is not None and self.model.edited:

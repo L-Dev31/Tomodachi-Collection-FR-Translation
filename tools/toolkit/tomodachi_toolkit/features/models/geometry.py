@@ -157,19 +157,23 @@ def gx_parse(b, o, n):
     return out
 
 
-def mdl_walk(model, matrices=None, world=None):
-    """Runs the render commands. Returns the draw calls: dict(op, shape, mat, matrix, stack).
-    matrices replaces the local matrices of the nodes (a pose of an animation); world, a dict, receives the matrix of every node."""
-    cur, stack, mat, draws = MDL_IDENT, [MDL_IDENT] * 32, 0, []
+def mdl_walk(model, matrices=None, world=None, visible=None):
+    """Runs the render commands. Returns the draw calls: dict(op, shape, mat, matrix, stack, shown).
+    matrices replaces the local matrices of the nodes (a pose of an animation); world, a dict, receives the matrix of every node.
+    shown: the node of the draw call is visible. The model says so for each of its nodes; visible (one flag per node, from an
+    animation) says it instead. A model that hides everything is shown whole, so that it can still be looked at."""
+    cur, stack, mat, draws, shown = MDL_IDENT, [MDL_IDENT] * 32, 0, [], True
     nodes = model['nodes']
     local = matrices if matrices is not None else [n['matrix'] for n in nodes]
     for k, (off, op, pr) in enumerate(model['sbc']):
-        if op == 0x03:
+        if op == 0x02:
+            shown = bool(visible[pr[0]] if visible is not None and pr[0] < len(visible) else pr[1])
+        elif op == 0x03:
             cur = stack[pr[0]]
         elif op in (0x04, 0x24, 0x44):
             mat = pr[0]
         elif op == 0x05:
-            draws.append({'op': k, 'shape': pr[0], 'mat': mat, 'matrix': cur, 'stack': tuple(stack)})
+            draws.append({'op': k, 'shape': pr[0], 'mat': mat, 'matrix': cur, 'stack': tuple(stack), 'shown': shown})
         elif op in (0x06, 0x26, 0x46, 0x66):
             if op in (0x46, 0x66):
                 cur = stack[pr[4] if op == 0x66 else pr[3]]
@@ -182,6 +186,9 @@ def mdl_walk(model, matrices=None, world=None):
             cur = m_mul(cur, m_scale(model['up']))
         elif op == 0x2B:
             cur = m_mul(cur, m_scale(model['down']))
+    if visible is None and draws and not any(d['shown'] for d in draws):
+        for d in draws:
+            d['shown'] = True
     return draws
 
 

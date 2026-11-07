@@ -5,6 +5,7 @@ from ...core.nitro import rgcn
 from ...core.narc import narc_offsets
 
 
+YEN_CODE = 0xFFE5                  # the character the game writes after a price: its glyph is the one that becomes the symbol of the money
 YEN = ['#######', '#..#..#', '#..#..#', '#######', '#.....#', '#.....#', '#....##']
 
 
@@ -103,26 +104,25 @@ def glyph_metrics(d, hdwc, g):
     return bytes(d[o:o + 3])
 
 
-def font_symbol(d, spec):
-    cp, letter, bars = spec
-    plgc, hdwc, maps, cw, ch, csz = font_cell(d)
-    g = glyph_index(d, maps, cp) if cp is not None else None
-    if g is not None:
-        return glyph_bits(d, plgc, cw, ch, csz, g), glyph_metrics(d, hdwc, g)
-    if letter:
-        g = glyph_index(d, maps, ord(letter))
-        bits = glyph_bits(d, plgc, cw, ch, csz, g)
-        for k in range(bars):
-            y = ch * (k + 1) // (bars + 1)
-            bits[y * cw:(y + 1) * cw] = [1] * cw
-        return bits, glyph_metrics(d, hdwc, g)
+def font_symbol(d, ch):
+    """(bits, metrics) of the glyph a font (the bytes of its file) draws for the character ch; None when it has no glyph for it."""
+    plgc, hdwc, maps, width, height, size = font_cell(d)
+    g = glyph_index(d, maps, ord(ch))
+    return None if g is None else (glyph_bits(d, plgc, width, height, size, g), glyph_metrics(d, hdwc, g))
 
 
-def set_symbol(d, spec):
+def set_symbol(d, ch):
+    """The font (the bytes of its file) with the glyph of the yen sign drawn as the character ch is: its picture and its widths, so that
+    the symbol looks and spaces the way ch does everywhere else. Raises ValueError when the font has no glyph for ch."""
+    found = font_symbol(d, ch)
+    if found is None:
+        raise ValueError(f'The fonts of the game cannot draw {ch!r}.')
+    bits, metrics = found
     d = bytearray(d)
-    plgc, hdwc, maps, cw, ch, csz = font_cell(d)
-    g = glyph_index(d, maps, 0xFFE5)
-    bits = font_symbol(d, spec)[0]
-    bits = bits + [0] * (csz * 8 - len(bits))
-    d[plgc + 16 + g * csz:plgc + 16 + (g + 1) * csz] = bytes(int(''.join(map(str, bits[i:i + 8])), 2) for i in range(0, csz * 8, 8))
+    plgc, hdwc, maps, width, height, size = font_cell(d)
+    g = glyph_index(d, maps, YEN_CODE)
+    bits = bits + [0] * (size * 8 - len(bits))
+    d[plgc + 16 + g * size:plgc + 16 + (g + 1) * size] = bytes(int(''.join(map(str, bits[i:i + 8])), 2) for i in range(0, size * 8, 8))
+    o = hdwc + 16 + (g - u16(d, hdwc + 8)) * 3
+    d[o:o + 3] = metrics
     return bytes(d)

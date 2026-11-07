@@ -3,8 +3,10 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
+import numpy as np
+
 from ..core.png import png_write
-from .theme import CANVAS, DARK, MUTED, PANEL, SAND, font
+from .theme import BROWN, CANVAS, DARK, FAMILY, LINK, MUTED, PANEL, SAND, font
 
 
 def card(parent, padx=14, pady=14):
@@ -20,6 +22,124 @@ def caption(parent, text, **grid):
     return label
 
 
+def batch_buttons(parent, export, import_, revert=None):
+    """The buttons every tab has for working on many things at once, always in this order: Batch export (everything the tab holds to a
+    folder), Batch import (from a folder) and Revert all (every change of the tab taken back). A command that is None leaves its button
+    out. Returns the frame that holds them; the caller packs it where it belongs. The buttons are its attributes export_button,
+    import_button and revert_button (None when left out)."""
+    frame = ttk.Frame(parent)
+    frame.export_button = ttk.Button(frame, text='Batch export', style='Soft.TButton', command=export) if export else None
+    frame.import_button = ttk.Button(frame, text='Batch import', style='Soft.TButton', command=import_) if import_ else None
+    frame.revert_button = ttk.Button(frame, text='Revert all', style='Soft.TButton', command=revert) if revert else None
+    for i, button in enumerate(b for b in (frame.export_button, frame.import_button, frame.revert_button) if b is not None):
+        button.pack(side='left', padx=(6 if i else 0, 0))
+    return frame
+
+
+RIGHT = '<Button-2>' if sys.platform == 'darwin' else '<Button-3>'      # the right click
+
+
+def popup(widget, event, entries):
+    """A menu at the pointer. entries: (label, command) pairs, None for a line between two groups; a command that is None greys its entry."""
+    menu = tk.Menu(widget, tearoff=0)
+    for entry in entries:
+        if entry is None:
+            menu.add_separator()
+        else:
+            menu.add_command(label=entry[0], command=entry[1], state='normal' if entry[1] else 'disabled')
+    try:
+        menu.tk_popup(event.x_root, event.y_root)
+    finally:
+        menu.grab_release()
+
+
+def copy_text(widget, text):
+    widget.clipboard_clear()
+    widget.clipboard_append(text)
+
+
+def flash(label, text, rest='', ms=1600):
+    """Shows text in a label for a moment, then rest: the answer to something that leaves no other trace."""
+    if getattr(label, 'flash_job', None):
+        label.after_cancel(label.flash_job)
+    label.config(text=text)
+    label.flash_job = label.after(ms, lambda: label.config(text=rest))
+
+
+class InfoTable(ttk.Frame):
+    """What is selected, as a table of (name, value) rows. A row that has a third item (a function) is a link: it is underlined and a
+    click on it calls the function."""
+
+    def __init__(self, master):
+        super().__init__(master)
+        self.tree = ttk.Treeview(self, columns=('value',), show='tree', selectmode='none', height=1)
+        self.tree.column('#0', width=96, stretch=False)
+        self.tree.column('value', width=320)
+        self.tree.tag_configure('link', foreground=LINK, font=(FAMILY, 9, 'underline'))
+        self.tree.pack(fill='x')
+        self.links = {}
+        self.tree.bind('<Button-1>', self.click)
+        self.tree.bind('<Motion>', lambda e: self.tree.configure(cursor='hand2' if self.tree.identify_row(e.y) in self.links else ''))
+
+    def show(self, rows):
+        tree = self.tree
+        tree.delete(*tree.get_children())
+        self.links = {}
+        for row in rows:
+            iid = tree.insert('', 'end', text=row[0], values=(row[1],), tags=('link',) if len(row) > 2 else ())
+            if len(row) > 2:
+                self.links[iid] = row[2]
+        tree.configure(height=max(1, len(rows)))
+
+    def click(self, event):
+        command = self.links.get(self.tree.identify_row(event.y))
+        if command:
+            command()
+        return 'break'
+
+
+class RevertButton(ttk.Button):
+    """'Revert changes': a button of the layout. The tab packs it at the bottom right of its pane, where it keeps its place like any other
+    widget. It is greyed out when there is nothing to take back: show(on) says whether there is."""
+
+    def __init__(self, master, command):
+        super().__init__(master, text='Revert changes', style='Soft.TButton', command=command)
+        self.state(['disabled'])
+
+    def show(self, on):
+        self.state(['!disabled'] if on else ['disabled'])
+
+
+class Hint:
+    """A few words that appear under a widget when the pointer rests on it (and go when it leaves or clicks)."""
+
+    def __init__(self, widget, text, delay=450):
+        self.widget, self.text, self.delay, self.tip, self.job = widget, text, delay, None, None
+        widget.bind('<Enter>', self.enter, add='+')
+        widget.bind('<Leave>', self.leave, add='+')
+        widget.bind('<ButtonPress>', self.leave, add='+')
+
+    def enter(self, event=None):
+        self.leave()
+        self.job = self.widget.after(self.delay, self.show)
+
+    def show(self):
+        self.job = None
+        tip = self.tip = tk.Toplevel(self.widget)
+        tip.wm_overrideredirect(True)
+        tip.wm_geometry('+%d+%d' % (self.widget.winfo_rootx() + 12, self.widget.winfo_rooty() + self.widget.winfo_height() + 4))
+        tk.Label(tip, text=self.text, bg='#FFF8E6', fg=BROWN, bd=1, relief='solid', padx=7, pady=4, justify='left', wraplength=320,
+                 font=font(9)).pack()
+
+    def leave(self, event=None):
+        if self.job is not None:
+            self.widget.after_cancel(self.job)
+            self.job = None
+        if self.tip is not None:
+            self.tip.destroy()
+            self.tip = None
+
+
 def tree_with_scrollbar(parent, **options):
     """A Treeview with its vertical scroll bar, packed into parent. Returns the tree."""
     tree = ttk.Treeview(parent, **options)
@@ -33,18 +153,15 @@ def tree_with_scrollbar(parent, **options):
 
 def checker_composite(w, h, rgba):
     """RGBA bytes whose transparent parts are drawn over a grey checkerboard (fully opaque result)."""
-    if rgba[3::4].count(255) == w * h:
+    picture = np.frombuffer(bytes(rgba), np.uint8).reshape(h, w, 4)
+    alpha = picture[..., 3:].astype(np.uint16)
+    if alpha.min(initial=255) == 255:
         return bytes(rgba)
-    shown = bytearray(rgba)
-    for i in range(3, len(shown), 4):
-        a = shown[i]
-        if a < 255:
-            x, y = divmod(i // 4, w)[::-1]
-            g = 205 if (x // 8 + y // 8) % 2 else 235
-            for k in range(3):
-                shown[i - 3 + k] = (shown[i - 3 + k] * a + g * (255 - a)) // 255
-            shown[i] = 255
-    return bytes(shown)
+    squares = (np.arange(w) // 8)[None, :] + (np.arange(h) // 8)[:, None]
+    grey = np.where(squares % 2, 205, 235).astype(np.uint16)[..., None]
+    shown = np.full((h, w, 4), 255, np.uint8)
+    shown[..., :3] = (picture[..., :3] * alpha + grey * (255 - alpha)) // 255
+    return shown.tobytes()
 
 
 class ImageView(ttk.Frame):

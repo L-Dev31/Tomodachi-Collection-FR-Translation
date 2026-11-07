@@ -29,6 +29,14 @@ def dict_entries(b, o, size):
     return ents, names
 
 
+def dict_offsets(b, o):
+    """Where the entries of the Nitro dictionary at o are in the file."""
+    n = b[o + 1]
+    p = o + 4 + 4 + (n + 1) * 4
+    unit = struct.unpack_from('<H', b, p)[0]
+    return [p + 4 + i * unit for i in range(n)]
+
+
 def bmd_textures(b):
     """List of dicts: name, fmt, w, h, tr0, off (absolute data offset), size, pal (index or None), plus palette list."""
     blocks = bmd_blocks(b)

@@ -1,0 +1,6 @@
+# The Python packages the toolkit uses (python -m pip install -r requirements.txt). run.py checks that they are installed.
+# Systems that manage Python themselves (Arch Linux...) refuse a plain pip install: use a virtual environment or the system packages.
+mido>=1.3           # MIDI files (features/bgm/midi.py)
+numpy>=1.26         # sound synthesis and picture work (features/bgm/synth.py, ui/widgets.py)
+pillow>=10.0        # PNG pictures (core/png.py)
+scipy>=1.10         # WAV files and resampling (features/audio/wav.py)

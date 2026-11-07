@@ -1,83 +1,56 @@
-"""Currency symbols and names, and how the fonts of the game draw a symbol."""
-import unicodedata
+"""The currencies: their names, and the symbol the game shows for each."""
 
-
+# The symbol of each money is a character that all three fonts of the game draw (the symbol is copied into every one of them): the sign
+# of the money when they have it, else the closest one they have. The fonts have the dollar, the fullwidth pound sign and the yen sign,
+# but no euro, won, rupee, ruble... sign, so those moneys have the letter that stands for them. tests/test_currency.py checks every
+# money against the fonts of a ROM.
 SYMBOL = {}
 
 
-for codes, spec in (
-        ('USD AUD CAD HKD NZD SGD TWD ARS BSD BBD BMD BZD BND CLP COP CUP DOP FJD GYD JMD KYD LRD MXN NAD SBD SRD TTD TVD UYU XCD ZWL TOP KID', ('$', 0x24, None, 0)),
-        ('GBP EGP FKP GIP SHP GGP IMP JEP LBP SYP SSP SDG', ('£', 0xA3, 'L', 1)),
-        ('JPY CNY CNH', ('¥', 0xFFE5, None, 0)),
-        ('EUR', ('€', 0x20AC, 'C', 2)),
-        ('ANG AWG XCG', ('ƒ', 0x192, 'f', 0)),
-        ('KRW', ('₩', None, 'W', 2)),
-        ('INR', ('₹', None, 'R', 2)),
-        ('RUB', ('₽', None, 'P', 2)),
-        ('PHP', ('₱', None, 'P', 2)),
-        ('TRY', ('₺', None, 'L', 2)),
-        ('VND', ('₫', None, 'D', 2)),
-        ('NGN', ('₦', None, 'N', 2)),
-        ('KZT', ('₸', None, 'T', 1)),
-        ('MNT', ('₮', None, 'T', 2)),
-        ('GHS', ('₵', None, 'C', 1)),
-        ('CRC', ('₡', None, 'C', 2)),
-        ('PYG', ('₲', None, 'G', 2)),
-        ('LAK', ('₭', None, 'K', 2)),
-        ('AZN', ('₼', None, 'M', 1)),
-        ('GEL', ('₾', None, 'L', 2)),
-        ('ILS', ('₪', None, 'I', 2)),
-        ('UAH', ('₴', None, 'H', 2)),
-        ('DKK FOK HRK ISK NOK SEK', ('k', None, 'k', 0)),
-        ('PLN', ('z', None, 'z', 0)),
-        ('AED DZD IQD MKD RSD TND STN GMD MAD AMD', ('D', None, 'D', 0)),
-        ('ALL BGN HNL LSL SZL MDL RON LYD SLE SLL', ('L', None, 'L', 0)),
-        ('AOA BAM CZK KES KWD MMK MWK PGK ZMW', ('K', None, 'K', 0)),
-        ('BIF CDF CHF DJF GNF HUF KMF RWF XAF XOF XPF', ('F', None, 'F', 0)),
-        ('KGS PEN SAR SOS TJS UZS XDR', ('S', None, 'S', 0)),
-        ('BRL IDR IRR KHR LKR MUR MVR MYR NPR OMR PKR SCR YER ZAR', ('R', None, 'R', 0)),
-        ('BOB BYN ETB PAB VES THB BHD', ('B', None, 'B', 0)),
-        ('NIO', ('C', None, 'C', 0)),
-        ('CVE', ('E', None, 'E', 0)),
-        ('HTG', ('G', None, 'G', 0)),
-        ('GTQ QAR', ('Q', None, 'Q', 0)),
-        ('BTN ERN', ('N', None, 'N', 0)),
-        ('MZN', ('M', None, 'M', 0)),
-        ('BWP MOP', ('P', None, 'P', 0)),
-        ('AFN MGA', ('A', None, 'A', 0)),
-        ('CLF MRU UGX', ('U', None, 'U', 0)),
-        ('BDT TMT TZS WST', ('T', None, 'T', 0)),
-        ('VUV', ('V', None, 'V', 0)),
-        ('ZWG', ('Z', None, 'Z', 0)),
-        ('JOD', ('J', None, 'J', 0)),
+for codes, symbol in (
+        ('USD AUD CAD HKD NZD SGD TWD ARS BSD BBD BMD BZD BND CLP COP CUP DOP FJD GYD JMD KYD LRD MXN NAD SBD SRD TTD TVD UYU XCD ZWL TOP KID', '$'),
+        ('GBP EGP FKP GIP SHP GGP IMP JEP LBP SYP SSP SDG', '\uFFE1'),                   # the fullwidth pound sign (the plain one is not in the small font)
+        ('JPY CNY CNH', '\uFFE5'),                                                       # the fullwidth yen sign: the one the game has
+        ('EUR', 'E'),
+        ('ANG AWG XCG', 'f'),
+        ('KRW', 'W'),
+        ('INR', 'R'),
+        ('RUB PHP', 'P'),
+        ('TRY GEL', 'L'),
+        ('VND', 'd'),
+        ('NGN', 'N'),
+        ('KZT MNT', 'T'),
+        ('GHS CRC', 'C'),
+        ('PYG', 'G'),
+        ('LAK', 'K'),
+        ('AZN', 'M'),
+        ('ILS', 'S'),
+        ('UAH', 'H'),
+        ('DKK FOK HRK ISK NOK SEK', 'k'),
+        ('PLN', 'z'),
+        ('AED DZD IQD MKD RSD TND STN GMD MAD AMD', 'D'),
+        ('ALL BGN HNL LSL SZL MDL RON LYD SLE SLL', 'L'),
+        ('AOA BAM CZK KES KWD MMK MWK PGK ZMW', 'K'),
+        ('BIF CDF CHF DJF GNF HUF KMF RWF XAF XOF XPF', 'F'),
+        ('KGS PEN SAR SOS TJS UZS XDR', 'S'),
+        ('BRL IDR IRR KHR LKR MUR MVR MYR NPR OMR PKR SCR YER ZAR', 'R'),
+        ('BOB BYN ETB PAB VES THB BHD', 'B'),
+        ('NIO', 'C'),
+        ('CVE', 'E'),
+        ('HTG', 'G'),
+        ('GTQ QAR', 'Q'),
+        ('BTN ERN', 'N'),
+        ('MZN', 'M'),
+        ('BWP MOP', 'P'),
+        ('AFN MGA', 'A'),
+        ('CLF MRU UGX', 'U'),
+        ('BDT TMT TZS WST', 'T'),
+        ('VUV', 'V'),
+        ('ZWG', 'Z'),
+        ('JOD', 'J'),
 ):
     for code in codes.split():
-        SYMBOL[code] = spec
-
-
-# every symbol of the table: (code point of its glyph or None, letter it is drawn from, bars across the letter)
-KNOWN = {}
-for _char, _cp, _letter, _bars in SYMBOL.values():
-    KNOWN.setdefault(_char, (_cp, _letter, _bars))
-
-
-def base_letter(ch):
-    """The plain letter an accented letter is made from (é gives e), or None."""
-    base = unicodedata.normalize('NFD', ch)[:1]
-    return base if base != ch and base.isascii() and base.isalpha() else None
-
-
-def symbol_spec(code, sym):
-    """(code point, letter, bars): how the fonts draw `sym` as the symbol of the money `code`. A font that has the character draws it;
-    the small one lacks many (accented letters, the euro sign) and draws a letter with bars across it instead: the one of the symbol
-    when the table knows it (a W with two bars for the won), else the plain letter of an accented one, else the first letter of the
-    code of the money."""
-    if len(sym) != 1:
-        raise ValueError('The symbol must be one character.')
-    char, cp, letter, bars = SYMBOL[code]
-    if sym != char:
-        cp, letter, bars = KNOWN.get(sym) or (ord(sym), base_letter(sym) or letter, 0)
-    return cp, letter or code[0], bars
+        SYMBOL[code] = symbol
 
 
 NAMES = dict(line.split(' ', 1) for line in '''

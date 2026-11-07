@@ -1,19 +1,22 @@
-"""BGM tab: the music of the game (the sequences of the sound archive) to hear, and to take out or put back as MIDI or SSEQ files."""
+"""BGM tab: the music of the game (the sequences of the sound archive) to hear, and to take out or put back as MIDI or SSEQ files. The
+music comes out with its instruments (a SoundFont for the MIDI files, the bank and the waves of the game for the SSEQ files)."""
 import collections
 import os
 import re
 import struct
 import threading
-import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from ...features.bgm.catalog import bank_file, bank_names, bank_programs, sequence_file, sequences
 from ...features.bgm.convert import assemble, fingerprint, from_midi, to_midi
+from ...features.bgm.soundfont import Waves, soundfont
 from ...features.bgm.sseq import SseqError, sseq_data, sseq_file
 from ...features.bgm.synth import RATE, Bank, Synth, SynthError
 from ...features.bgm.timeline import play
-from ..theme import BROWN, CANVAS, DARK, MUTED, SAND
+from ..theme import BROWN, CANVAS, MUTED, SAND
+from ..transport import Transport
+from ..widgets import InfoTable
 from .listing import ListingTab
 
 TRACK_COLORS = ('#F7822B', '#4F86D9', '#3FA36B', '#C4488E', '#8E6BD8', '#D9A400', '#2FA3B8', '#B3573A', '#6C7A89', '#7A9E2E', '#D96A14',
@@ -63,10 +66,13 @@ class BgmTab(ListingTab):
         self.loading = False
         self.synth = None                     # works out the sound of a sequence (made when it is first needed)
         self.heard = collections.OrderedDict()          # (file, bank, volume) -> the sound, the latest ones
-        self.job, self.playing, self.timer = None, None, None      # the sound being prepared; (token, start, seconds, Timeline) while it plays
+        self.transport = Transport(lambda: self.app.player)      # the sound that plays, and the point it is at
+        self.loaded = None                    # the sequence whose sound the transport holds
+        self.start = 0.0                      # where listening starts, in seconds (the point, while the sound is not loaded)
+        self.job = None                       # the sound being prepared
+        self.tick_timer, self.poll_timer = None, None       # the line that follows the music; the look at the sound being prepared
         right = self.build_listing(
-            weights=(2, 3), batch=(self.export_all, self.replace_folder, self.revert_all),
-            show='tree headings', columns=('time', 'tracks', 'size'))
+            weights=(2, 3), batch=(self.export_all, self.import_all, self.revert_all), show='tree headings', columns=('time', 'tracks', 'size'))
         self.tree.heading('#0', text='Sequence')
         self.tree.heading('time', text='Length')
         self.tree.heading('tracks', text='Tracks')
@@ -76,19 +82,16 @@ class BgmTab(ListingTab):
         self.tree.column('tracks', width=50, anchor='e')
         self.tree.column('size', width=60, anchor='e')
         self.tree.bind('<<TreeviewSelect>>', self.select)
-        self.title_text, self.info_text, self.note_text = tk.StringVar(), tk.StringVar(), tk.StringVar()
-        ttk.Label(right, textvariable=self.title_text, foreground=DARK, font=('Segoe UI', 11, 'bold')).pack(anchor='w')
-        ttk.Label(right, textvariable=self.info_text, foreground=BROWN, wraplength=460, justify='left').pack(anchor='w', pady=(2, 8))
+        self.note_text = tk.StringVar()
+        self.build_menu(self.entries)
+        self.table = InfoTable(right)
+        self.table.pack(fill='x')
         row = ttk.Frame(right)
-        row.pack(fill='x')
-        self.play_button = ttk.Button(row, text='Play', style='Soft.TButton', width=6, command=self.listen)
-        self.buttons = [self.play_button] + [ttk.Button(row, text=t, style=s, command=c) for t, s, c in (
-            ('Replace with MIDI or SSEQ...', 'Accent.TButton', self.replace), ('Export...', 'Soft.TButton', self.export),
-            ('Revert', 'Soft.TButton', self.revert))]
-        for b in self.buttons:
-            b.pack(side='left', padx=(0, 6))
+        row.pack(fill='x', pady=(8, 0))
+        self.play_button = ttk.Button(row, text='▶ Play', style='Soft.TButton', command=self.listen)
+        self.play_button.pack(side='left')
         self.play_text = tk.StringVar()
-        ttk.Label(right, textvariable=self.play_text, foreground=MUTED).pack(anchor='w', pady=(6, 0))
+        ttk.Label(row, textvariable=self.play_text, foreground=MUTED).pack(side='left', padx=10)
         settings = ttk.Frame(right)
         settings.pack(fill='x', pady=(4, 0))
         ttk.Label(settings, text='Instruments (bank)').pack(side='left')
@@ -104,6 +107,7 @@ class BgmTab(ListingTab):
         self.roll = tk.Canvas(right, bg=CANVAS, highlightthickness=1, highlightbackground=SAND, height=170, width=460)
         self.roll.pack(fill='both', expand=True, pady=(10, 0))
         self.roll.bind('<Configure>', lambda e: self.draw())
+        self.roll.bind('<Button-1>', self.seek_click)
         ttk.Label(right, textvariable=self.note_text, foreground=MUTED, wraplength=460, justify='left').pack(anchor='w', pady=(6, 0))
         self.reset_view()
 
@@ -113,15 +117,14 @@ class BgmTab(ListingTab):
         self.hush()
         self.sel = None
         self.roll.delete('all')
-        self.title_text.set('')
-        self.info_text.set('Select a sequence in the list.' if self.snd else '')
+        self.table.show([])
         self.note_text.set('')
         self.set_state()
 
     def set_state(self):
         on = self.sel is not None
-        for b in self.buttons:
-            b.state(['!disabled'] if on else ['disabled'])
+        self.play_button.state(['!disabled'] if on else ['disabled'])
+        self.sync_revert()
         for w in (self.bank, self.volume_box):
             w.state(['!disabled'] if on else ['disabled'])
         if not on:
@@ -137,7 +140,7 @@ class BgmTab(ListingTab):
         self.reset_view()
 
     def on_hide(self):
-        self.hush()
+        self.pause()
 
     def on_show(self):
         if self.snd is None:
@@ -145,7 +148,7 @@ class BgmTab(ListingTab):
                 snd = self.session.sound()
                 infos = {s.index: s for s in sequences(snd)}
             except Exception as e:
-                self.info_text.set(f'Cannot read the music of the game: {e}')
+                self.table.show([('Error', f'Cannot read the music of the game: {e}')])
                 return
             self.snd, self.infos = snd, infos
             self.banks = bank_names(snd)
@@ -229,25 +232,42 @@ class BgmTab(ListingTab):
         self.describe()
         self.draw()
 
+    def entries(self, iid):
+        if not iid.isdigit():
+            return []
+        i = int(iid)
+        return [('Play', self.listen), ('Export...', lambda: self.export(i)), ('Replace with MIDI or SSEQ...', lambda: self.replace(i)),
+                None, ('Revert', (lambda: self.revert(i)) if i in self.new else None)]
+
+    def item_changed(self):
+        return self.sel in self.new
+
+    def show_bank(self, name):
+        """The music that plays with a bank (a link of the Audio tab): the list shows those sequences and the first is selected."""
+        self.on_show()
+        self.only.set(False)
+        self.query.set(name.replace('BANK_', ''))
+        leaves = [i for g in self.tree.get_children() for i in self.tree.get_children(g)]
+        if leaves:
+            self.tree.selection_set(leaves[0])
+            self.tree.see(leaves[0])
+
     def describe(self):
         i = self.sel
         if i is None or self.snd is None:
             return
         s = self.infos[i]
-        self.title_text.set(s.name + ('   (changed)' if i in self.new else ''))
         try:
             tl = self.timeline(i)
-            notes = tl.note_count()
-            loop = f'loops from {clock(tl.seconds(tl.loop[0]))} to {clock(tl.seconds(tl.loop[1]))}' if tl.loop else 'plays once'
+            loop = f'from {clock(tl.seconds(tl.loop[0]))} to {clock(tl.seconds(tl.loop[1]))}' if tl.loop else 'plays once'
             tempo = sorted({b for t, b in tl.tempos})
             speed = f'{tempo[0]} BPM' if len(tempo) == 1 else (f'{tempo[0]} to {tempo[-1]} BPM' if tempo else '120 BPM')
-            line = f'{len(tl.lines)} track(s), {notes:,} notes, {clock(tl.seconds(tl.length))}, {speed}, {loop}.'
+            rows = [('Length', clock(tl.seconds(tl.length))), ('Tracks', str(len(tl.lines))), ('Notes', f'{tl.note_count():,}'), ('Tempo', speed), ('Loop', loop)]
         except SseqError as e:
-            line = f'Cannot read this sequence: {e}'
+            rows = [('Error', f'Cannot read this sequence: {e}')]
         size = len(self.file(i))
-        original = s.size
-        more = f' (the game has {original:,})' if size != original else ''
-        self.info_text.set(f'Number {i}, {s.player}.  {line}\nFile of {size:,} bytes{more}.')
+        more = f' (the game has {s.size:,})' if size != s.size else ''
+        self.table.show([('Sequence', s.name + ('   (changed)' if i in self.new else '')), ('Number', f'{i}   {s.player}')] + rows + [('File', f'{size:,} bytes{more}')])
         self.loading = True
         banks = [n for n, name in self.banks]
         bank = self.setting(i, 'bank')
@@ -283,8 +303,7 @@ class BgmTab(ListingTab):
             x = t * width / total
             y = height - 3 - (k - lo) * step
             c.create_rectangle(x, y - thick, max(x + 1, (t + max(length, 1)) * width / total), y, fill=TRACK_COLORS[n % 16], outline='')
-        if self.playing is not None:
-            self.move_head(tl.ticks_at(time.monotonic() - self.playing[1]))
+        self.draw_head()
 
     def roll_size(self):
         return max(self.roll.winfo_width(), 200), max(self.roll.winfo_height(), 120)
@@ -300,17 +319,28 @@ class BgmTab(ListingTab):
             return
         width, height = self.roll_size()
         x = min(width - 2, max(1.0, tick * width / total))
-        self.roll.create_line(x, 0, x, height, fill=DARK, width=2, tags='head')
+        self.roll.create_line(x, 0, x, height, fill=BROWN, width=3, tags='head')
 
     # ----- hearing the music
 
     def listen(self):
-        """The Play button: plays the sequence as it will be in the game, or stops it while it is being prepared or played."""
-        if self.job is not None or self.playing is not None:
-            self.hush()
+        """The Play button: plays the sequence from its point, as it will be in the game. Pause keeps the point, so Play goes on from there.
+        While the sound is being prepared, the button cancels that."""
+        if self.job is not None:
+            self.cancel_job()
+            self.after_play()
+            return
+        if self.transport.playing:
+            self.pause()
             return
         i = self.sel
         if i is None or self.snd is None:
+            return
+        if self.loaded == i:                  # paused: go on from the point
+            error = self.transport.play()
+            if error:
+                messagebox.showerror('Play', error)
+            self.after_play()
             return
         try:
             tl = self.timeline(i)
@@ -329,79 +359,140 @@ class BgmTab(ListingTab):
             return
         if pcm is not None:
             self.heard.move_to_end(key)
-            self.begin(pcm, tl)
+            self.begin(pcm)
             return
         if self.synth is None:
             self.synth = Synth(self.snd.swar)
         job = self.job = Rendering()
         threading.Thread(target=job.work, args=(self.synth, tl, instruments, volume), daemon=True).start()
-        self.play_button.config(text='Stop')
         self.play_text.set('Preparing the sound... 0%')
-        self.timer = self.after(100, self.poll, job, key, tl)
+        self.after_play()
+        self.poll_timer = self.after(100, self.poll, job, key, tl)
 
     def poll(self, job, key, tl):
         """Looks at the sound being prepared: shows how far it is, plays it when it is ready."""
         if job is not self.job:
             return
-        self.timer = None
+        self.poll_timer = None
         if not job.done:
             self.play_text.set('Preparing the sound... %d%%' % int(job.progress * 100))
-            self.timer = self.after(100, self.poll, job, key, tl)
+            self.poll_timer = self.after(100, self.poll, job, key, tl)
             return
         self.job = None
+        self.after_play()
         if job.error or job.pcm is None:
-            self.hush()
             if job.error:
                 self.play_text.set(f'Cannot play this: {job.error}')
             return
         self.heard[key] = job.pcm
         while len(self.heard) > HEARD:
             self.heard.popitem(last=False)
-        self.begin(job.pcm, tl)
+        self.begin(job.pcm)
 
-    def begin(self, pcm, tl):
-        """Plays a sound that is ready and follows it with the line on the piano roll."""
+    def begin(self, pcm):
+        """Puts a sound that is ready in the transport, at the point, and plays it. The transport keeps it, so Pause and Play work on it."""
         if not any(pcm):
-            self.hush()
+            self.after_play()
             self.play_text.set('Nothing to hear: the bank has none of the instruments this music asks for.')
             return
-        error = self.app.player.play(RATE, pcm)
+        self.transport.load(pcm, RATE, self.start)
+        self.loaded = self.sel
+        error = self.transport.play()
+        self.after_play()
         if error:
-            self.hush()
             messagebox.showerror('Play', error)
-            return
-        token = object()
-        self.playing = (token, time.monotonic(), len(pcm) / RATE, tl)
-        self.play_button.config(text='Stop')
-        self.tick(token)
 
-    def tick(self, token):
-        if self.playing is None or self.playing[0] is not token:
-            return
-        _, began, seconds, tl = self.playing
-        elapsed = time.monotonic() - began
-        if elapsed >= seconds + 0.3:
-            self.hush()
-            return
-        music = max(seconds - TAIL, 0.0)
-        self.play_text.set(f'Playing {clock(min(elapsed, music))} / {clock(music)}')
-        self.move_head(tl.ticks_at(elapsed))
-        self.timer = self.after(200, self.tick, token)
-
-    def hush(self):
-        """Stops the sound that is being prepared or played, and shows the tab at rest."""
+    def cancel_job(self):
+        """Drops the sound being prepared: its thread is asked to stop, and the look at it ends."""
         if self.job is not None:
             self.job.stop.set()
             self.job = None
-        if self.timer is not None:
-            self.after_cancel(self.timer)
-            self.timer = None
-        if self.playing is not None:
-            self.playing = None
-            self.app.player.stop()
-        self.play_button.config(text='Play')
-        self.play_text.set('')
+        if self.poll_timer is not None:
+            self.after_cancel(self.poll_timer)
+            self.poll_timer = None
+
+    def pause(self):
+        """Pauses the music and keeps its point, so that Play goes on from there. A sound still being prepared is dropped."""
+        self.cancel_job()
+        self.transport.pause()
+        self.after_play()
+
+    def hush(self):
+        """Stops the music for good: the sound is dropped and the point goes back to the start. An edit of the sequence or of its settings
+        does this, as the sound made from the old ones is no longer the one to play."""
+        self.cancel_job()
+        self.transport.stop()
+        self.loaded, self.start = None, 0.0
+        self.after_play()
+
+    def after_play(self):
+        """Keeps the button, the text under it and the line on the piano roll in step with the music: the line follows the sound while it
+        plays, and stays at the point when it is paused."""
+        if self.tick_timer is not None:
+            self.after_cancel(self.tick_timer)
+            self.tick_timer = None
+        here = self.sel is not None and self.loaded == self.sel
+        playing = here and self.transport.playing
+        if self.job is not None:
+            self.play_button.config(text='Cancel')
+        else:
+            self.play_button.config(text='Pause' if playing else '▶ Play')
+        self.show_time(here)
+        self.draw_head()
+        if playing:
+            self.tick_timer = self.after(40, self.tick)          # the line moves 25 times a second, so it follows the music
+
+    def show_time(self, here):
+        """The text under the button: the time reached in the music and its length, or where the listening starts."""
+        if self.job is not None:
+            return                                # the preparation shows its own progress
+        if not here:
+            self.play_text.set(f'Starts at {clock(self.start)}' if self.start > 0 else '')
+            return
+        music = max(self.transport.duration - TAIL, 0.0)
+        now = min(self.transport.position(), music)
+        if self.transport.playing:
+            word = 'Playing'
+        elif self.transport.position() >= self.transport.duration - 0.02:
+            word = 'Ended'
+        else:
+            word = 'Paused at'
+        self.play_text.set(f'{word} {clock(now)} / {clock(music)}')
+
+    def tick(self):
+        self.tick_timer = None
+        if self.transport.playing and self.transport.position() >= self.transport.duration:
+            self.transport.pause()                # the sound is over: the point stays at its end, and Play starts it again
+        self.after_play()
+
+    def draw_head(self):
+        """The line on the piano roll where the music is: where it has reached while it plays, else the point it starts from."""
         self.roll.delete('head')
+        if self.sel is None or self.snd is None:
+            return
+        try:
+            tl = self.timeline(self.sel)
+        except SseqError:
+            return
+        seconds = self.transport.position() if self.loaded == self.sel else self.start
+        self.move_head(tl.ticks_at(seconds))
+
+    def seek_click(self, event):
+        """A click on the piano roll sets the point where the listening starts. A sound that plays goes on from there."""
+        i = self.sel
+        if i is None or self.snd is None:
+            return
+        try:
+            tl = self.timeline(i)
+        except SseqError:
+            return
+        width, _ = self.roll_size()
+        self.start = tl.seconds(round(min(max(event.x, 0), width) / width * max(tl.length, 1)))
+        if self.loaded == i:
+            error = self.transport.seek(self.start)
+            if error:
+                messagebox.showerror('Play', error)
+        self.after_play()
 
     # ----- changes
 
@@ -473,11 +564,9 @@ class BgmTab(ListingTab):
         edit['file'] = None if file == self.original(i) else file
         self.store(i, edit)
 
-    def replace(self):
-        i = self.sel
-        if i is None:
-            return
-        path = filedialog.askopenfilename(filetypes=MIDI_TYPES)
+    def replace(self, i=None):
+        i = self.sel if i is None else i
+        path = filedialog.askopenfilename(filetypes=MIDI_TYPES) if i is not None else ''
         if not path:
             return
         try:
@@ -493,9 +582,34 @@ class BgmTab(ListingTab):
         if not missing:
             self.note_text.set(f'Imported {os.path.basename(path)}.')
 
-    def export(self):
-        """Saves the music of the sequence as a MIDI file or as an SSEQ file: the name or the type chosen in the dialog says which."""
-        i = self.sel
+    def bank_folder(self, bank):
+        """The name of the folder of a bank in an export: the name of the bank in the archive."""
+        return re.sub(r'[^\w.-]+', '_', self.bank_label(bank)).strip('._') or 'bank_%d' % bank
+
+    def instruments(self, bank, extensions, waves=None):
+        """The files of the instruments of a bank, by extension: '.sf2' (a SoundFont), '.sbnk' (the bank as the game has it) and '.swar'
+        (the waves of the game). Returns ({extension: bytes}, why some are missing or ''). waves: the Waves of the archive, when there
+        are some already (to make many SoundFonts quickly)."""
+        files, why = {}, ''
+        try:
+            data = bank_file(self.snd, bank)
+        except (IndexError, TypeError, struct.error):
+            return files, 'the instruments of this bank cannot be read'
+        if '.sbnk' in extensions:
+            files['.sbnk'] = data
+        if '.swar' in extensions:
+            files['.swar'] = self.snd.swar
+        if '.sf2' in extensions:
+            try:
+                files['.sf2'] = soundfont(data, self.snd.swar, self.bank_label(bank), waves)
+            except SynthError as e:
+                why = str(e).rstrip('.')
+        return files, why
+
+    def export(self, i=None):
+        """Saves the music of the sequence as a MIDI file or as an SSEQ file: the name or the type chosen in the dialog says which. The
+        instruments come out beside it with the same name: a SoundFont for the MIDI file, the bank and the waves for the SSEQ file."""
+        i = self.sel if i is None else i
         if i is None:
             return
         picked = tk.StringVar(value=EXPORT_TYPES[0][0])
@@ -511,17 +625,29 @@ class BgmTab(ListingTab):
         else:                                   # no extension, or one that is neither: the type chosen in the dialog decides
             kind = 'sseq' if picked.get() == EXPORT_TYPES[1][0] else 'mid'
             out += '.' + kind
+        base = os.path.splitext(out)[0]
         try:
             blob = self.file(i) if kind == 'sseq' else to_midi(self.timeline(i), self.infos[i].name)
+            more, why = self.instruments(self.setting(i, 'bank'), ('.sbnk', '.swar') if kind == 'sseq' else ('.sf2',))
             with open(out, 'wb') as f:
                 f.write(blob)
+            for suffix, data in more.items():
+                with open(base + suffix, 'wb') as f:
+                    f.write(data)
         except (OSError, ValueError) as e:
             messagebox.showerror('Export music', str(e))
             return
-        self.note_text.set(f'Exported {os.path.basename(out)}.')
+        name, put = os.path.basename(out), [os.path.basename(base) + suffix for suffix in more]
+        if not put:
+            said = f'Exported {name}.'
+        elif kind == 'mid':
+            said = f'Exported {name} and {put[0]}: play the MIDI file with that SoundFont to hear the music of the game.'
+        else:
+            said = f'Exported {name} with {put[0]} and {put[1]}, the instruments of the game.'
+        self.note_text.set(said + (f' No instruments: {why}.' if why else ''))
 
-    def revert(self):
-        i = self.sel
+    def revert(self, i=None):
+        i = self.sel if i is None else i
         if i is not None and self.new.pop(i, None) is not None:
             self.hush()
             self.fill()
@@ -545,14 +671,32 @@ class BgmTab(ListingTab):
         return [int(i) for g in self.tree.get_children() for i in self.tree.get_children(g)]
 
     def export_all(self):
-        folder = filedialog.askdirectory()
-        if not folder or self.snd is None:
+        """The listed sequences in a folder, each as a .mid and a .sseq, in a folder per bank. The instruments are in the folder of the
+        bank: the SoundFont (.sf2) for the .mid files, the bank as the game has it (.sbnk) for the .sseq files. The waves of the game
+        (.swar, that every .sbnk uses) are once at the top."""
+        if self.snd is None:
+            return
+        folder = filedialog.askdirectory(title='Folder to export the listed sequences to (with their instruments)')
+        if not folder:
             return
         ids = self.listed()
-        done = 0
+        if not ids:
+            messagebox.showinfo('Export music', 'There is no sequence in the list.')
+            return
+        waves, folders, problems, done = Waves(self.snd.swar), {}, {}, 0
         try:
             for n, i in enumerate(ids):
-                base = os.path.join(folder, stem(self.infos[i]))
+                bank = self.setting(i, 'bank')
+                if bank not in folders:
+                    where = folders[bank] = os.path.join(folder, self.bank_folder(bank))
+                    os.makedirs(where, exist_ok=True)
+                    files, why = self.instruments(bank, ('.sf2', '.sbnk'), waves)
+                    for suffix, data in files.items():
+                        with open(os.path.join(where, self.bank_folder(bank) + suffix), 'wb') as f:
+                            f.write(data)
+                    if why:
+                        problems[self.bank_label(bank)] = why
+                base = os.path.join(folders[bank], stem(self.infos[i]))
                 with open(base + '.mid', 'wb') as f:
                     f.write(to_midi(self.timeline(i), self.infos[i].name))
                 with open(base + '.sseq', 'wb') as f:
@@ -561,35 +705,46 @@ class BgmTab(ListingTab):
                 if n % 10 == 0:
                     self.count.set(f'Exporting {n} / {len(ids)}...')
                     self.update_idletasks()
+            with open(os.path.join(folder, 'waves.swar'), 'wb') as f:
+                f.write(self.snd.swar)
         except (OSError, ValueError) as e:
             messagebox.showerror('Export music', str(e))
         self.fill()
-        messagebox.showinfo('Export music', f'{done} sequence(s) exported to {folder}: a .mid and a .sseq each.')
-
-    def replace_folder(self):
-        self.import_all()
+        text = (f'{done} sequence(s) exported to {folder}, in a folder per bank: a .mid and a .sseq each, with the instruments of the bank '
+                f'(a SoundFont for the .mid files, the .sbnk for the .sseq files; waves.swar has the waves they use).')
+        if problems:
+            text += '\n\nNo instruments for:\n' + '\n'.join(f'{name}: {why}' for name, why in list(problems.items())[:12])
+        messagebox.showinfo('Export music', text)
 
     def import_all(self):
-        folder = filedialog.askdirectory(title='Folder with music files')
-        if not folder or self.snd is None:
+        """The .sseq and .mid files of a folder (and of the folders in it) that are named like the export names them. Music that is the
+        same as now is skipped."""
+        if self.snd is None:
+            return
+        folder = filedialog.askdirectory(title='Folder with the .mid and .sseq files named like the exports')
+        if not folder:
             return
         found = collections.defaultdict(dict)
-        for name in sorted(os.listdir(folder)):
-            m = FILE_NAME.match(name)
-            if m and int(m.group(1)) in self.infos:
-                found[int(m.group(1))][m.group(2).lower().replace('midi', 'mid')] = os.path.join(folder, name)
-        done, errors = 0, []
+        for root, dirs, names in os.walk(folder):
+            dirs.sort()
+            for name in sorted(names):
+                m = FILE_NAME.match(name)
+                if m and int(m.group(1)) in self.infos:
+                    found[int(m.group(1))][m.group(2).lower().replace('midi', 'mid')] = os.path.join(root, name)
+        done, same, errors = 0, 0, []
         for i, files in sorted(found.items()):
             try:
                 if self.import_changed(i, files):
                     done += 1
+                else:
+                    same += 1
             except (OSError, ValueError) as e:
                 errors.append(f'{os.path.basename(next(iter(files.values())))}: {e}')
         self.fill()
         self.describe()
         self.draw()
-        text = f'{done} sequence(s) replaced.'
-        messagebox.showinfo('Replace from folder', text + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
+        text = f'{done} sequence(s) imported' + (f', {same} the same as they are now' if same else '') + '.'
+        messagebox.showinfo('Import music', text + ('\n\nSkipped:\n' + '\n'.join(errors[:12]) if errors else ''))
 
     def import_changed(self, i, files):
         """Imports the file of a sequence that differs from the music it has now (the .sseq first, then the .mid). True when one was."""

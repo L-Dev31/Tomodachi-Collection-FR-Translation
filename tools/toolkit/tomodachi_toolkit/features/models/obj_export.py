@@ -24,6 +24,11 @@ def shape_uv_size(model, draw, by_tex):
     return (mat['w'] or 1, mat['h'] or 1) if mat else (1, 1)
 
 
+def plain_repeat(tparam):
+    """True when the game repeats a texture on both axes without mirroring it: the only wrapping that Blender does by default."""
+    return bool(tparam >> 16 & 1 and tparam >> 17 & 1 and not tparam >> 18 & 3)
+
+
 def obj_export(b, stem):
     """Model file -> (obj text, mtl text, {png file name: bytes}, info). Positions are in model space (Y up)."""
     models = mdl_models(b)
@@ -35,6 +40,7 @@ def obj_export(b, stem):
     multi = len(models) > 1
     obj = ['# Tomodachi Location Toolkit model export. Keep the object names; do not join or rename objects.', 'mtllib %s.mtl' % stem]
     mtl, pngs, png_of, info = [], {}, {}, {'shapes': 0, 'polys': 0, 'flat': 0, 'notes': []}
+    wrapped = set()                                         # textures that the game does not repeat plainly, where a polygon goes beyond the picture
     vb = tb = nb = 0
     for mi, m in enumerate(models):
         pre = 'm%d_' % mi if multi else ''
@@ -61,6 +67,11 @@ def obj_export(b, stem):
             else:
                 c = mat['dif_amb'] & 0x7FFF
                 mtl.append('Kd %.4f %.4f %.4f' % ((c & 31) / 31, (c >> 5 & 31) / 31, (c >> 10 & 31) / 31))
+            alpha = mat['attr'] >> 16 & 31                  # how see-through the polygons are in the game (31: solid)
+            if alpha < 31 and not (pic and pic[1]):
+                mtl.append('d %.4f' % (alpha / 31))         # the transparency Blender reads (a texture with its own alpha keeps it)
+            elif alpha < 31:
+                info['notes'].append('%s is see-through (%d of 31) in the game: Blender only shows the transparency of its texture.' % (mat['name'], alpha))
             mtl.append('')
         draws = mdl_draws(m)
         if len(draws) < len(m['shapes']):
@@ -102,6 +113,8 @@ def obj_export(b, stem):
             if not faces:
                 continue
             mat = m['materials'][d['mat']] if d['mat'] < len(m['materials']) else None
+            if mat and mat['tex'] and tl and not plain_repeat(mat['tparam']) and any(not (0 <= s <= 16 * tw and 0 <= q <= 16 * th) for s, q in tl):
+                wrapped.add(mat['tex'])
             obj.append('o ' + obj_shape_name(multi, mi, d['shape'], ref.shape['name']))
             obj += ['v %.7f %.7f %.7f' % p for p in vl]
             obj += ['vt %.6f %.6f' % (s / (16 * tw), 1 - t / (16 * th)) for s, t in tl]
@@ -113,4 +126,9 @@ def obj_export(b, stem):
             vb, tb, nb = vb + len(vl), tb + len(tl), nb + len(nl)
             info['shapes'] += 1
             info['polys'] += len(faces)
+    if wrapped:
+        names = sorted(wrapped)
+        more = ' ...' if len(names) > 6 else ''
+        info['notes'].append(f"Some textures are mirrored or do not repeat in the game ({', '.join(names[:6])}{more}): Blender repeats "
+                             'them plainly, so the parts of the model outside their picture can look different.')
     return '\n'.join(obj) + '\n', '\n'.join(mtl) + '\n', pngs, info

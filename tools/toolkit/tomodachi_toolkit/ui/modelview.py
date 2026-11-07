@@ -16,21 +16,22 @@ NO_ACTION = 'No animation'
 
 
 class ModelView(ttk.Frame):
-    """Shows the models of a BMD0 file. `load` takes the file and a function that finds the animations of the models on show."""
+    """Shows the models of a BMD0 file. `load` takes the file and a function that finds the animations of the models on show.
+    Without `controls` the view is only the picture (the animation plays and the mouse moves the camera, nothing else)."""
 
-    def __init__(self, master, width=420, height=300):
+    def __init__(self, master, width=420, height=300, controls=True):
         super().__init__(master)
-        top = ttk.Frame(self)
-        top.pack(fill='x', pady=(0, 4))
+        self.controls = controls
+        self.top = ttk.Frame(self)                  # the choice of the model, shown when the file has several
         self.model_name = tk.StringVar()
-        self.model_label = ttk.Label(top, text='Model')
-        self.model_box = ttk.Combobox(top, textvariable=self.model_name, state='readonly', width=22)
+        self.model_box = ttk.Combobox(self.top, textvariable=self.model_name, state='readonly', width=22)
+        self.model_box.pack(side='left')
         self.model_box.bind('<<ComboboxSelected>>', lambda e: self.pick_model())
-        ttk.Label(top, text='Drag to turn   Wheel to zoom   Right drag to move   Double click to reset', foreground=MUTED).pack(side='right')
         self.canvas = tk.Canvas(self, bg=CANVAS, highlightthickness=1, highlightbackground=SAND, width=width, height=height)
         self.canvas.pack(fill='both', expand=True)
         bar = ttk.Frame(self)
-        bar.pack(fill='x', pady=(4, 0))
+        if controls:
+            bar.pack(fill='x', pady=(4, 0))
         self.play_text = tk.StringVar(value='Pause')
         self.play_button = ttk.Button(bar, textvariable=self.play_text, style='Soft.TButton', width=7, command=self.toggle)
         self.play_button.pack(side='left')
@@ -70,19 +71,19 @@ class ModelView(ttk.Frame):
         c.bind('<MouseWheel>', self.wheel)
         c.bind('<Button-4>', lambda e: self.zoom(1))
         c.bind('<Button-5>', lambda e: self.zoom(-1))
-        self.clear('Select a model in the list.')
+        self.only = None
+        self.clear()
 
     # ----- content
 
     def clear(self, text=''):
-        """Empties the view and shows a line of text in it."""
+        """Empties the view and shows a line of text in it (a model that cannot be drawn says why)."""
         self.stop_timer()
         self.data = self.scene = self.cam = self.action = None
         self.actions, self.models = [], []
         self.playing = False
         self.text = text
-        self.model_label.pack_forget()
-        self.model_box.pack_forget()
+        self.top.pack_forget()
         self.canvas.delete('all')
         self.item = None
         self.fill_actions()
@@ -95,28 +96,27 @@ class ModelView(ttk.Frame):
             self.canvas.create_text(w // 2, self.canvas.winfo_height() // 2, text=self.text, fill=MUTED, font=font(10), justify='center',
                                     width=max(w - 40, 100), tags='hint')
 
-    def load(self, data, fetch=None, keep=False):
-        """Shows the models of the BMD0 file data. fetch(counts) returns (animations, index of the first to play) for the models whose
-        numbers of nodes are counts. keep: keep the choice of model, the camera and the animation of the previous file."""
+    def load(self, data, fetch=None, keep=False, model=None, only=None):
+        """Shows the models of the BMD0 file data. fetch(scene) returns (animations, index of the first to play) for the models on
+        show. keep: keep the choice of model, the camera and the animation of the previous file. model: the index of the model to show;
+        only: the index of the only shape to draw (a view of a shape)."""
         old = (self.model_name.get(), self.cam, self.action.label if self.action else None, self.frame) if keep and self.scene else None
-        self.data, self.fetch = data, fetch
+        self.data, self.fetch, self.only = data, fetch, only
         try:
             self.models = [m['name'] for m in mdl_models(data)]
         except Exception as e:
             self.clear(f'Cannot read this model:\n{e}')
             return
         if not self.models:
-            self.clear('No 3D model in this file.')
+            self.clear()
             return
-        names = list(self.models) + ([ALL] if len(self.models) > 1 else [])
+        names = list(self.models) + ([ALL] if len(self.models) > 1 and model is None else [])
         self.model_box.configure(values=names)
-        if len(names) > 1:
-            self.model_label.pack(side='left')
-            self.model_box.pack(side='left', padx=(6, 0))
+        if len(names) > 1 and self.controls:
+            self.top.pack(fill='x', pady=(0, 4), before=self.canvas)
         else:
-            self.model_label.pack_forget()
-            self.model_box.pack_forget()
-        self.model_name.set(old[0] if old and old[0] in names else names[0])
+            self.top.pack_forget()
+        self.model_name.set(names[model] if model is not None and model < len(names) else old[0] if old and old[0] in names else names[0])
         self.build(old)
 
     def pick_model(self):
@@ -126,7 +126,7 @@ class ModelView(ttk.Frame):
         name = self.model_name.get()
         which = None if name == ALL else self.models.index(name)
         try:
-            self.scene = Scene(self.data, which)
+            self.scene = Scene(self.data, which, self.only)
         except Exception as e:
             self.scene = None
             self.clear(f'Cannot draw this model:\n{e}')
@@ -136,9 +136,8 @@ class ModelView(ttk.Frame):
             self.cam = old[1]
         else:
             self.cam = self.scene.camera()
-        counts = {len(self.scene.models[mi]['nodes']) for mi in self.scene.shown}
         try:
-            self.actions, first = self.fetch(counts) if self.fetch else ([], 0)
+            self.actions, first = self.fetch(self.scene) if self.fetch else ([], 0)
         except Exception:
             self.actions, first = [], 0
         self.fill_actions()
@@ -161,6 +160,21 @@ class ModelView(ttk.Frame):
     def pick_action(self):
         label = self.action_name.get()
         self.start(next((a for a in self.actions if a.label == label), None), 0.0)
+
+    def replace_layer(self, anim):
+        """An animation was changed: the one of the same kind and name, in the action that plays and in the others, is the new one."""
+        for action in self.actions + ([self.action] if self.action is not None else []):
+            for layers in (action.layers, action.ambient):
+                for i, layer in enumerate(layers):
+                    if layer.kind == anim.kind and layer.name == anim.name:
+                        layers[i] = anim
+        self.refresh()
+
+    def show_action(self, name):
+        """Plays the action called name, when the model has it."""
+        action = next((a for a in self.actions if a.name == name), None)
+        if action is not None and action is not self.action:
+            self.start(action, 0.0)
 
     def start(self, action, frame=0.0):
         self.action = action
@@ -242,7 +256,7 @@ class ModelView(ttk.Frame):
         rw, rh = max(32, w // scale), max(32, h // scale)
         state = self.action.state(self.scene, int(self.frame)) if self.action is not None else {}
         start = time.perf_counter()
-        fb = render(self.scene, self.cam, rw, rh, state.get('poses'), state.get('srts'), BACKGROUND)
+        fb = render(self.scene, self.cam, rw, rh, state.get('poses'), state.get('srts'), BACKGROUND, state.get('patterns'), state.get('visible'))
         self.src.configure(data=to_ppm(rw, rh, fb))
         image = self.src
         if scale > 1:

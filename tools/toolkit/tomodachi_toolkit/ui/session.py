@@ -7,7 +7,8 @@ from ..core.compression import lz10
 from ..core.narc import narc_files
 from ..core.rom import Rom
 from ..features.audio.sdat import Sound
-from ..features.keyboard import KB_FILE
+from ..features.currency.symbols import load_symbols
+from ..features.keyboard import KB_FILE, LayoutError, load_characters, read_keyboards
 
 
 class Session:
@@ -21,6 +22,9 @@ class Session:
             raise ValueError(f'{KB_FILE} is missing: this is not a Tomodachi Collection ROM.')
         self.crc32 = zlib.crc32(self.rom.d)
         self._arm9 = None
+        self._keyboards = None
+        self._characters = None
+        self._symbols = None
         self._sound = None
         self._subs = collections.OrderedDict()
 
@@ -29,6 +33,36 @@ class Session:
         if self._arm9 is None:
             self._arm9 = self.rom.arm9()
         return self._arm9
+
+    def keyboards(self):
+        """The soft keyboards of the ROM with the characters of their keys (None when its tables are not where the toolkit looks)."""
+        if self._keyboards is None:
+            try:
+                self._keyboards = read_keyboards(self.arm9())
+            except LayoutError:
+                self._keyboards = False
+        return self._keyboards or None
+
+    def set_font_changes(self, added):
+        """The characters the Fonts tab added ({font file: {code: rows}}): the keyboard and the text see them at once. The ROM is
+        changed only by the patch."""
+        from ..features.fonts.grow import FONT_FILES, patched_font
+        from ..features.keyboard.charset import Characters
+        key_font, text_font = FONT_FILES[1], FONT_FILES[0]
+        self._characters = Characters(patched_font(self.rom, key_font, added.get(key_font)), patched_font(self.rom, text_font, added.get(text_font)))
+        self._symbols = None
+
+    def characters(self):
+        """The characters the game can draw (features/keyboard/charset.py), read the first time they are asked for."""
+        if self._characters is None:
+            self._characters = load_characters(self.rom)
+        return self._characters
+
+    def symbols(self):
+        """The characters that can be the symbol of the money (features/currency/symbols.py), read the first time they are asked for."""
+        if self._symbols is None:
+            self._symbols = load_symbols(self.rom)
+        return self._symbols
 
     def sound(self):
         """The sound data (SDAT) of the ROM, read the first time it is asked for."""

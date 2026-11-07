@@ -131,13 +131,15 @@ class Camera:
 
 
 class Scene:
-    """The models of a BMD0 file ready to draw. `which` is the index of the only model to show, or None for all of them."""
+    """The models of a BMD0 file ready to draw. `which` is the index of the only model to show, or None for all of them; `only` the
+    index of the only shape to draw (of the shown models), or None for all of them."""
 
-    def __init__(self, b, which=None):
+    def __init__(self, b, which=None, only=None):
         self.models = mdl_models(b)
         if not self.models:
             raise ValueError('no model in this file')
         self.shown = [which] if which is not None else list(range(len(self.models)))
+        self.only = only
         try:
             texs, pals = bmd_textures(b)
         except Exception:
@@ -152,16 +154,19 @@ class Scene:
             self.parts[mi] = [Part(b, model, d) for d in mdl_walk(model)]
         self.bounds()
 
-    def tile(self, model, mat):
-        """The Tile of a material of a model, or None when it has no texture."""
-        key = (id(model), mat['name'])
+    def tile(self, model, mat, tex=None, pal=None):
+        """The Tile of a material of a model, or None when it has no texture. tex and pal, names, put another picture on the
+        material (an animation changes it) instead of its own."""
+        tex = mat['tex'] if tex is None else tex
+        pal = mat['pal'] if pal is None else pal
+        key = (id(model), mat['name'], tex, pal)
         if key not in self.tiles:
             tile = None
-            t = self.texs.get(mat['tex'])
+            t = self.texs.get(tex)
             if t is not None:
                 try:
-                    if mat['pal'] is not None:
-                        pi = next((i for i, p in enumerate(self.pals) if p['name'] == mat['pal']), None)
+                    if pal is not None:
+                        pi = next((i for i, p in enumerate(self.pals) if p['name'] == pal), None)
                         if pi is not None:
                             t = dict(t, pal=pi)
                     w, h, rgba = tex_render(self.b, t, self.pals)
@@ -176,6 +181,8 @@ class Scene:
         for mi in self.shown:
             model = self.models[mi]
             for part, draw in zip(self.parts[mi], mdl_walk(model)):
+                if not draw['shown'] or self.only not in (None, part.shape):
+                    continue
                 mats = {-1: draw['matrix']}
                 for slot, ids in part.groups:
                     mx = mats.get(slot) or draw['stack'][slot]
@@ -339,9 +346,11 @@ def material_texture_matrix(mat, tile, override):
     return scale[0], scale[1], trans[0] * w, trans[1] * h
 
 
-def render(scene, cam, width, height, poses=None, srts=None, background=0xE8E4DC):
+def render(scene, cam, width, height, poses=None, srts=None, background=0xE8E4DC, patterns=None, visible=None):
     """Draws the scene and returns the picture as a list of width * height packed 0xRRGGBB pixels.
-    poses {model index: node matrices} moves the skeleton of a model, srts {(model index, material index): (scale, translation)} the texture of a material."""
+    What animations change: poses {model index: node matrices} move the skeleton of a model, srts {(model index, material index):
+    (scale, translation)} move the texture of a material, patterns {(model index, material index): (texture name, palette name)}
+    change its picture, visible {model index: one flag per node} shows and hides parts of a model."""
     fb = [background] * (width * height)
     zb = [0.0] * (width * height)
     view = cam.matrix()
@@ -350,17 +359,20 @@ def render(scene, cam, width, height, poses=None, srts=None, background=0xE8E4DC
     cx, cy = width / 2, height / 2
     poses = poses or {}
     srts = srts or {}
+    patterns = patterns or {}
+    visible = visible or {}
     for mi in scene.shown:
         model = scene.models[mi]
-        for part, draw in zip(scene.parts[mi], mdl_walk(model, poses.get(mi))):
+        for part, draw in zip(scene.parts[mi], mdl_walk(model, poses.get(mi), None, visible.get(mi))):
             mat = model['materials'][part.mat] if part.mat < len(model['materials']) else None
             sides = mat['attr'] >> 6 & 3 if mat else SHOW_FRONT
-            if sides == 0 or not part.tris:
+            if not draw['shown'] or sides == 0 or not part.tris or scene.only not in (None, part.shape):
                 continue
-            tile = scene.tile(model, mat) if mat else None
+            tex, pal = patterns.get((mi, part.mat), (None, None))
+            tile = scene.tile(model, mat, tex, pal) if mat else None
             lit = bool(mat['attr'] & 15) if mat else True
             color = packed(mat['dif_amb'] & 0x7FFF) if mat else 0xB0B0B0
-            if tile is None and mat and mat['tex'] is not None:
+            if tile is None and mat and (mat['tex'] if tex is None else tex) is not None:
                 color = 0xC8C8C8
             sx, sy, tx, ty = material_texture_matrix(mat, tile, srts.get((mi, part.mat)))
             n = len(part.vx)
